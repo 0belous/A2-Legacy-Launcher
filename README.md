@@ -38,6 +38,6 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     `./main.ps1`
 
-6. Provide it wil an APK and OBB to install
+6. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
