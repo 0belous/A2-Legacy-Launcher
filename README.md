@@ -6,7 +6,7 @@ A small script to patch Orion Drift APKs to run offline.
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
 > [!NOTE]
-> This project has NOT been extensively tested, please report bugs in [issues](https://github.com/0belous/A2-Legacy-Launcher)
+> This project has NOT been extensively tested, please report bugs in [issues](https://github.com/0belous/A2-Legacy-Launcher/issues)
 
 ## Dependencies
 - Java 8+ in PATH
