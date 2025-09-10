@@ -46,4 +46,4 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 Rebuilding the APK with debugging enabled gives us permission to access the game files without root. <br>
 From there we can place an Engine.ini which overrides the games file letting us bypass authentication and load straight into the map without connecting to any servers.
 
-It's simple but tedious, and super automatable
+It's simple but tedious
