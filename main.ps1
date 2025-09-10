@@ -1,8 +1,24 @@
 param (
 [string]$ini,
 [string]$apk,
-[string]$obb
+[string]$obb,
+[switch]$help
 )
+
+if ($Help) {
+    Write-Host @"
+     _    ____    _     _____ ____    _    ______   __  _        _   _   _ _   _  ____ _   _ _____ ____  
+    / \  |___ \  | |   | ____/ ___|  / \  / ___\ \ / / | |      / \ | | | | \ | |/ ___| | | | ____|  _ \ 
+   / _ \   __) | | |   |  _|| |  _  / _ \| |    \ V /  | |     / _ \| | | |  \| | |   | |_| |  _| | |_) |
+  / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ < 
+ /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
+
+USAGE:
+./main.ps1 (no parameters, interactive mode)
+./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
+"@
+    exit
+}
 
 # Orion Drift Legacy Launcher by Obelous
 
@@ -15,6 +31,7 @@ if(!(Test-Path ./android-sdk/licenses/android-sdk-license)){
 
 if(!(Get-Command java -ErrorAction SilentlyContinue)){
     Write-Host "[ERROR] Java not found in path"
+    exit
 }else{
     Write-Host "[INFO] Java detected"
 }
@@ -48,6 +65,7 @@ function pushIni{
     $result = .\android-sdk\platform-tools\adb.exe shell $shellCommand
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] Failed to create directory or copy INI file. ADB output: $result"
+        exit
     } else {
         Write-Host "[SUCCESS] INI file pushed successfully."
     }
@@ -101,6 +119,7 @@ if($connectedDevices.Count -eq 1){
         Write-Host "[INFO] Skipping OBB upload"
     } else{
         Write-Host "[ERROR] OBB file not found"
+        exit
     }
     if(!$ini){
         Write-Host "[1] - Default: will work for most builds <-- Recommended"
@@ -123,7 +142,9 @@ if($connectedDevices.Count -eq 1){
     Write-Host "[DONE] Launch the game, run maintain.ps1 before every subsequent launch!"
     }else{
         Write-Host "[ERROR] Not an APK file or file doesn't exist"
+        exit
     }
 }else{
     Write-Host "[ERROR] Check headset for authorization prompt and make sure it's the only one connected"
+    exit
 }
