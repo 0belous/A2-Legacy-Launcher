@@ -9,7 +9,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 > This project has NOT been extensively tested, please report bugs in [issues](https://github.com/0belous/A2-Legacy-Launcher/issues)
 
 ## Dependencies
-- Java 8+ in PATH
+- Java 17+ in PATH
 
 ## Get started
 1. Clone this repo
@@ -43,6 +43,15 @@ Particularly useful when running old versions of Orion Drift that don't have ser
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
 The maintain.ps1 script must be ran every time the game is opened because it deletes the Engine.ini
+
+## Usage
+`./main.ps1` Interactive installer, drag and drop files
+Alternatively use arguments
+```
+USAGE:
+./main.ps1 (no parameters, interactive mode)
+./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
+```
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
