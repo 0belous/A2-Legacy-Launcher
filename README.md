@@ -12,6 +12,12 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 - Java 17+ in PATH
 
 ## Get started
+
+**Setup:**
+
+- Open powershell (without admin)
+- `cd Documents`
+
 1. Clone this repo
 
     `git clone https://github.com/0belous/A2-Legacy-Launcher.git`
@@ -42,7 +48,11 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
-The maintain.ps1 script must be ran every time the game is opened because it deletes the Engine.ini
+**Maintain:**
+
+When you open the game it will delete the Engine.ini, so after the first time you have to run the maintain.ps1 script before opening it again.
+
+`./maintain.ps1`
 
 ## Usage
 `./main.ps1` Interactive installer, drag and drop files
