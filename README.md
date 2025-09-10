@@ -41,3 +41,9 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 6. Provide it wil an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+
+## How does it work?
+Rebuilding the APK with debugging enabled gives us permission to access the game files without root. <br>
+From there we can place an Engine.ini which overrides the games file letting us bypass authentication and load straight into the map without connecting to any servers.
+
+It's simple but tedious, and super automatable
