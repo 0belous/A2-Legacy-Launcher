@@ -77,7 +77,10 @@ if($connectedDevices.Count -eq 1){
             }elseif($whichIni.Contains("3")){
                 $iniInput = Read-Host -Prompt "Drag and drop your ini file here"
                 pushIni($iniInput)
+            } else{
+                Write-Host "Enter a valid option or file"
             }
+            Write-Host "[DONE] Launch the game, run maintain.ps1 before every subsequent launch!"
         }else{
             Write-Host "[ERROR] Not an APK file or file doesn't exist"
         }
