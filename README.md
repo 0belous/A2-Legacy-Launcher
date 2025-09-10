@@ -46,7 +46,8 @@ The maintain.ps1 script must be ran every time the game is opened because it del
 
 ## Usage
 `./main.ps1` Interactive installer, drag and drop files
-Alternatively use arguments
+
+Alternatively you can use arguments
 ```
 USAGE:
 ./main.ps1 (no parameters, interactive mode)
