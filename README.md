@@ -30,7 +30,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     - Run `./install.ps1` and drop the file in
 
-4. Connect your headset run this then click authorize (developer mode required)
+4. Connect your headset and autorize usb debugging (developer mode required)
 
     `./android-sdk/platform-tools/adb.exe devices`
 
