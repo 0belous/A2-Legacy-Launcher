@@ -70,7 +70,7 @@ if($connectedDevices.Count -eq 1){
             Write-Host "[2] - Vegas: default level used in the vegas build"
             Write-Host "[3] - Custom: provide a custom ini file"
             $whichIni = Read-Host -Prompt "Enter 1-3 to pick which ini file to use (press enter for default)"
-            if($whichIni.Contains("1")){
+            if($whichIni.Contains("1") -Or ($whichIni -eq '')){
                 pushIni('./Engine.ini')
             }elseif($whichIni.Contains("2")){
                 pushIni('./EngineVegas.ini')
