@@ -42,10 +42,10 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
-The maintain.ps1 script must be ran every time the game is opened because it deletes our Engine.ini
+The maintain.ps1 script must be ran every time the game is opened because it deletes the Engine.ini
 
 ## How does it work?
-Rebuilding the APK with debugging enabled gives us permission to access the game files without root. <br>
+Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
 From there we can place an Engine.ini which overrides the games file letting us bypass authentication and load straight into the map without connecting to any servers.
 
 It's simple but tedious
