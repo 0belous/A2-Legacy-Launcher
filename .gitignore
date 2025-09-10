@@ -1,2 +1,4 @@
 android-sdk/
 tmp/
+*.obb
+*.apk
