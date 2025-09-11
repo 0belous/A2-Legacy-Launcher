@@ -48,12 +48,6 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
-**Maintain:**
-
-When you open the game it will delete the Engine.ini, so after the first time you have to run the maintain.ps1 script before opening it again.
-
-`./maintain.ps1`
-
 ## Usage
 `./main.ps1` Interactive installer, drag and drop files
 
