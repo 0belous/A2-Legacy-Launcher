@@ -13,9 +13,9 @@ if ($Help) {
   / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ < 
  /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
 
-USAGE:
-./main.ps1 (no parameters, interactive mode)
-./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
+  USAGE:
+  ./main.ps1 (no parameters, interactive mode)
+  ./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
 "@
     exit
 }
@@ -60,8 +60,8 @@ function pushIni{
     .\android-sdk\platform-tools\adb.exe push $iniFile /data/local/tmp/Engine.ini
     $packageName = "com.AnotherAxiom.A2"
     $targetDir = "files/UnrealGame/A2/A2/Saved/Config/Android"
-
-    $shellCommand = "run-as $packageName sh -c 'mkdir files 2>/dev/null; mkdir files/UnrealGame 2>/dev/null; mkdir files/UnrealGame/A2 2>/dev/null; mkdir files/UnrealGame/A2/A2 2>/dev/null; mkdir files/UnrealGame/A2/A2/Saved 2>/dev/null; mkdir files/UnrealGame/A2/A2/Saved/Config 2>/dev/null; mkdir $targetDir 2>/dev/null; cp /data/local/tmp/Engine.ini $targetDir/'"
+    # Setup folder structure /sdcard/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Android, Copy new ini, chmod for persistence on newer builds
+    $shellCommand = "run-as $packageName sh -c 'mkdir files 2>/dev/null; mkdir files/UnrealGame 2>/dev/null; mkdir files/UnrealGame/A2 2>/dev/null; mkdir files/UnrealGame/A2/A2 2>/dev/null; mkdir files/UnrealGame/A2/A2/Saved 2>/dev/null; mkdir files/UnrealGame/A2/A2/Saved/Config 2>/dev/null; mkdir $targetDir 2>/dev/null; rm $targetDir/Engine.ini 2>/dev/null; cp /data/local/tmp/Engine.ini $targetDir/ 2>/dev/null; chmod 555 $targetDir 2>/dev/null'"
     $result = .\android-sdk\platform-tools\adb.exe shell $shellCommand
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] Failed to create directory or copy INI file. ADB output: $result"
@@ -139,7 +139,7 @@ if($connectedDevices.Count -eq 1){
     }else{
         pushIni($ini)
     }
-    Write-Host "[DONE] Launch the game, run maintain.ps1 before every subsequent launch!"
+    Write-Host "[DONE] Launch the game, Have fun!"
     }else{
         Write-Host "[ERROR] Not an APK file or file doesn't exist"
         exit
