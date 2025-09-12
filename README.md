@@ -12,7 +12,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 > This project has NOT been extensively tested, please report bugs in [issues](https://github.com/0belous/A2-Legacy-Launcher/issues)
 
 ## Dependencies
-- Java 17+ in PATH
+- Python 3
 
 ## Get started
 
@@ -29,23 +29,11 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
     `cd A2-Legacy-Launcher`
 
-3. Enable powershell execution
-
-    `Set-ExecutionPolicy Unrestricted`
-
-3. Install the Android SDK
-
-    - Download [commandline-tools](https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip)
-
-    - Run `./install.ps1` and drop the file in
-
 4. Connect your headset and autorize usb debugging (developer mode required)
-
-    `./android-sdk/platform-tools/adb.exe devices`
 
 5. Run the script
 
-    `./main.ps1`
+    `py main.py`
 
 6. Provide it with an APK and OBB to install
 
