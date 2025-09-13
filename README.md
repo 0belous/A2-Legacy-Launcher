@@ -1,9 +1,6 @@
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher (python rewrite)
 
-Rewriting this script in python to add a few extra features, especially with automating the install process.<br>
-This version is not current finished or ready for use
-
 A small script to patch Orion Drift APKs to run offline.
 
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
@@ -18,7 +15,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 **Setup:**
 
-- Open powershell (without admin)
+- Open cmd (without admin)
 - `cd Documents`
 
 1. Clone this repo
