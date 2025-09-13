@@ -273,14 +273,17 @@ def main():
     if not ini_path:
         print("\n[1] - Default: will work for most builds <-- Recommended")
         print("[2] - Vegas: default level used in the vegas build")
-        print("[3] - Custom: provide a custom ini file")
-        choice = input("Enter 1-3 to pick which ini file to use (press Enter for default): ").strip()
+        print("[3] - 4v4: 4v4 level used in the competitive branch")
+        print("[4] - Custom: provide a custom ini file")
+        choice = input("Enter 1-4 to pick which ini file to use (press Enter for default): ").strip()
         
         if choice == "1" or not choice:
             ini_path = "Engine.ini"
         elif choice == "2":
             ini_path = "EngineVegas.ini"
         elif choice == "3":
+            ini_path = "Engine4v4.ini"
+        elif choice == "4":
             ini_path = parse_file_drop(input("Drag and drop your custom .ini file here, then press Enter: "))
         else:
             print_error("Invalid option.")
