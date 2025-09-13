@@ -1,5 +1,5 @@
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
-# Orion Drift Legacy Launcher (python rewrite)
+# Orion Drift Legacy Launcher
 
 A small script to patch Orion Drift APKs to run offline.
 
