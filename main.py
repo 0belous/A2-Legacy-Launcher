@@ -215,7 +215,7 @@ def push_ini(device_id, ini_file):
     run-as {PACKAGE_NAME} sh -c '
     mkdir -p {target_dir} 2>/dev/null;
     cp {tmp_ini_path} {target_dir}/Engine.ini 2>/dev/null;
-    chmod 555 {target_dir} 2>/dev/null
+    chmod -R 555 {target_dir} 2>/dev/null
     '
     """
     run_command([ADB_PATH, "-s", device_id, "shell", shell_command])
