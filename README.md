@@ -10,6 +10,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 ## Dependencies
 - Python 3
+- Java 17+
 
 ## Get started
 
@@ -17,6 +18,8 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 - Open cmd (without admin)
 - `cd Documents`
+
+**Install:**
 
 1. Clone this repo
 
@@ -28,11 +31,23 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 4. Connect your headset and autorize usb debugging (developer mode required)
 
-5. Run the script
+5. Setup a virtual enviroment (venv)
+  
+   `py -m venv venv`
+
+8. Activate the venv
+  
+   `.\venv\Scripts\activate`
+
+9. Install the requests library
+   
+   `pip install requests`
+
+10. Run the script
 
     `py main.py`
 
-6. Provide it with an APK and OBB to install
+11. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
