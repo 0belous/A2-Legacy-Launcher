@@ -37,13 +37,13 @@ Particularly useful when running old versions of Orion Drift that don't have ser
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
 ## Usage
-`./main.ps1` Interactive installer, drag and drop files
+`py main.py` Interactive installer, drag and drop files
 
 Alternatively you can use arguments
 ```
 USAGE:
-./main.ps1 (no parameters, interactive mode)
-./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
+py main.py [no parameters: interactive mode]
+py main.py [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
 ```
 
 ## How does it work?
