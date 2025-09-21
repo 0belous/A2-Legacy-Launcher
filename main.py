@@ -83,7 +83,7 @@ def run_interactive_command(command, env=None):
     try:
         subprocess.run(command, check=True, env=env)
     except FileNotFoundError:
-        print_error(f"Command not found: {command[0]}. Please ensure it's installed and in your PATH.")
+        print_error(f"Command not found: {command[0]}. Please ensure it's in your PATH.")
     except subprocess.CalledProcessError as e:
         print_error(f"Command failed with exit code {e.returncode}: {' '.join(command)}")
     except Exception as e:
@@ -214,6 +214,7 @@ def push_ini(device_id, ini_file):
     shell_command = f"""
     run-as {PACKAGE_NAME} sh -c '
     mkdir -p {target_dir} 2>/dev/null;
+    chmod -R 755 {target_dir} 2>/dev/null;
     cp {tmp_ini_path} {target_dir}/Engine.ini 2>/dev/null;
     chmod -R 555 {target_dir} 2>/dev/null
     '
@@ -223,16 +224,18 @@ def push_ini(device_id, ini_file):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Orion Drift Legacy Launcher by Obelous (Python Edition)",
+        description="Orion Drift Legacy Launcher by Obelous",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("-a", "--apk", help="Path to the source APK file.")
-    parser.add_argument("-o", "--obb", help="Path to the OBB file (optional).")
-    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file (optional).")
+    parser.add_argument("-o", "--obb", help="Path to the OBB file.")
+    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
     args = parser.parse_args()
 
     print(BANNER)
     
+    is_manual_mode = any([args.apk, args.obb, args.ini])
+
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
     else:
@@ -246,31 +249,51 @@ def main():
         print_error(f"{KEYSTORE_FILE} not found. Please ensure it's in the same directory.")
 
     device_id = get_connected_device()
-    clean_temp_dir()
 
-    apk_path = args.apk or parse_file_drop(input("Drag and drop the APK you want to use onto this terminal, then press Enter: "))
-    
-    if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
-        print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
-    
-    print_success("Found APK")
-    
-    process_apk(apk_path)
-    install_modded_apk(device_id)
+    if is_manual_mode:
+        if args.apk:
+            apk_path = args.apk
+            if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
+                print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
+            print_success(f"Found APK: {apk_path}")
+            clean_temp_dir()
+            process_apk(apk_path)
+            install_modded_apk(device_id)
 
-    obb_path = args.obb or parse_file_drop(input("Drag and drop the OBB you want to use, or press Enter to skip: "))
-    
-    if obb_path:
-        if os.path.isfile(obb_path) and obb_path.lower().endswith(".obb"):
-            print_success("Found OBB")
+        if args.obb:
+            obb_path = args.obb
+            if not os.path.isfile(obb_path) or not obb_path.lower().endswith(".obb"):
+                print_error(f"Invalid OBB path: File does not exist or is not an .obb file.\nPath: '{obb_path}'")
+            print_success(f"Found OBB: {obb_path}")
             upload_obb(device_id, obb_path)
-        else:
-            print_error("OBB file not found or invalid. Continuing without OBB.", exit_code=None)
-    else:
-        print_info("Skipping OBB upload.")
 
-    ini_path = args.ini
-    if not ini_path:
+        if args.ini:
+            ini_path = args.ini
+            if not os.path.isfile(ini_path):
+                 print_error(f"Invalid INI path: File does not exist.\nPath: '{ini_path}'")
+            print_success(f"Found INI: {ini_path}")
+            push_ini(device_id, ini_path)
+    else:
+        clean_temp_dir()
+
+        apk_path = parse_file_drop(input("Drag and drop the APK you want to use onto this terminal, then press Enter: "))
+        if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
+            print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
+        print_success("Found APK")
+        process_apk(apk_path)
+        install_modded_apk(device_id)
+
+        obb_path = parse_file_drop(input("Drag and drop the OBB you want to use, or press Enter to skip: "))
+        if obb_path:
+            if os.path.isfile(obb_path) and obb_path.lower().endswith(".obb"):
+                print_success("Found OBB")
+                upload_obb(device_id, obb_path)
+            else:
+                print_error("OBB file not found or invalid. Continuing without OBB.", exit_code=None)
+        else:
+            print_info("Skipping OBB upload.")
+
+        ini_path = ""
         print("\n[1] - Default: will work for most builds <-- Recommended")
         print("[2] - Vegas: default level used in the vegas build")
         print("[3] - 4v4: 4v4 level used in the competitive branch")
@@ -288,12 +311,12 @@ def main():
         else:
             print_error("Invalid option.")
     
-    if os.path.isfile(ini_path):
-        push_ini(device_id, ini_path)
-    else:
-        print_error(f"INI file not found: {ini_path}")
+        if os.path.isfile(ini_path):
+            push_ini(device_id, ini_path)
+        else:
+            print_error(f"INI file not found: {ini_path}")
 
-    print("\n[DONE] Launch the game. Have fun!")
+    print("\n[DONE] All tasks complete. Have fun!")
 
 if __name__ == "__main__":
     main()
