@@ -27,7 +27,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 4. Install legacy launcher
 
-   `pipx install git+https://github.com/0belous/A2-Legacy-Launcher.git`
+   `pipx install a2-legacy-launcher`
 
 5. Run the script
 
