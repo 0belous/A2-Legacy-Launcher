@@ -364,16 +364,25 @@ def main():
         print("[4] - Custom: provide a custom ini file")
         choice = input("Enter 1-4 to pick which ini file to use (press Enter for default): ").strip()
         
+        ini_file_name = None
         if choice == "1" or not choice:
-            ini_path = "Engine.ini"
+            ini_file_name = "Engine.ini"
         elif choice == "2":
-            ini_path = "EngineVegas.ini"
+            ini_file_name = "EngineVegas.ini"
         elif choice == "3":
-            ini_path = "Engine4v4.ini"
+            ini_file_name = "Engine4v4.ini"
         elif choice == "4":
             ini_path = parse_file_drop(input("Drag and drop your custom .ini file here, then press Enter: "))
         else:
             print_error("Invalid option.")
+
+        if ini_file_name:
+            try:
+                with resources.as_file(files('a2_legacy_launcher').joinpath(ini_file_name)) as p:
+                    ini_path = str(p)
+            except (ImportError, AttributeError):
+                with resources.path('a2_legacy_launcher', ini_file_name) as p:
+                    ini_path = str(p)
     
         if os.path.isfile(ini_path):
             push_ini(device_id, ini_path)
