@@ -6,7 +6,7 @@ A small script to patch Orion Drift APKs to run offline.
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
 > [!NOTE]
-> This script is not compatible with linux, if you manage to make it work feel free to create a pull request.
+> Linux users see linux.md
 
 ## Dependencies
 - Python 3
@@ -15,29 +15,27 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 **Install:**
 
-1. Insall pipx
+1. Install pipx
 
-   `sudo apt install pipx`
+   `pip install --user pipx`
 
 2. Add pipx to PATH
 
-   `pipx ensurepath`
+   `py -m pipx ensurepath`
+
+3. Reopen command prompt
 
 4. Install legacy launcher
 
    `pipx install a2-legacy-launcher`
 
-5. Install java
-
-   `sudo apt install openjdk-21-jdk`
-
-7. Run the script
+5. Run the script
 
    `a2ll`
 
-8. If you are prompted to install java follow the instructions and restart your command prompt after.
+7. If you are prompted to install java follow the instructions and restart your command prompt after.
 
-9. Provide it with an APK and OBB to install
+8. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
