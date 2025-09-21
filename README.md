@@ -12,6 +12,8 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 <details>
    <summary>Windows instructions:</summary>
+
+   <br>
    
 **Install:**
 
@@ -42,6 +44,8 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 <details>
    <summary>Debian instructions:</summary>
+   
+   <br>
    
    **Install:**
 
@@ -74,7 +78,6 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 ## Usage
 
 ```
-USAGE:
 a2ll [no parameters: interactive mode]
 a2ll [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
 ```
