@@ -21,7 +21,7 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 2. Add pipx to PATH
 
-   `pipx ensurepath`
+   `py -m pipx ensurepath`
 
 3. Reopen command prompt
 
@@ -33,7 +33,9 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `a2ll`
 
-7. Provide it with an APK and OBB to install
+7. If you are prompted to install java follow the instructions and restart your command prompt after.
+
+8. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
