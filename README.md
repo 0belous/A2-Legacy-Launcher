@@ -10,51 +10,31 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 ## Dependencies
 - Python 3
-- Java 17+
 
 ## Get started
 
-**Setup:**
-
-- Open cmd (without admin)
-- `cd Documents`
-
 **Install:**
 
-1. Clone this repo
+1. Insall pipx
 
-    `git clone https://github.com/0belous/A2-Legacy-Launcher.git`
+   `pip install --user pipx`
 
-2. Change directory
+2. Add pipx to PATH
 
-    `cd A2-Legacy-Launcher`
+   `pipx ensurepath`
 
-4. Connect your headset and autorize usb debugging (developer mode required)
+3. Reopen command prompt
 
-5. Setup a virtual enviroment (venv)
-  
-   `py -m venv venv`
+4. Install legacy launcher
 
-8. Activate the venv
-  
-   `.\venv\Scripts\activate`
+   `pipx install git+https://github.com/0belous/A2-Legacy-Launcher.git`
 
-9. Install the requests library
-   
-   `pip install requests`
-
-10. Run the script
-
-    `py main.py`
-
-11. Provide it with an APK and OBB to install
+5. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
 ## Usage
-`py main.py` Interactive installer, drag and drop files
 
-Alternatively you can use arguments
 ```
 USAGE:
 py main.py [no parameters: interactive mode]
