@@ -33,9 +33,9 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `a2ll`
 
-7. If you are prompted to install java follow the instructions and restart your command prompt after.
+6. If you are prompted to install java follow the instructions and restart your command prompt after.
 
-8. Provide an APK and OBB to install
+7. Provide an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 </details>
@@ -53,21 +53,19 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx ensurepath`
 
+3. Install java
+
+   `sudo apt install openjdk-21-jdk`
+
 4. Install legacy launcher
 
    `pipx install a2-legacy-launcher`
 
-5. Install java
-
-   `sudo apt install openjdk-21-jdk`
-
-7. Run the script
+5. Run the script
 
    `a2ll`
 
-8. If you are prompted to install java follow the instructions and restart your command prompt after.
-
-9. Provide an APK and OBB to install
+6. Provide an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
