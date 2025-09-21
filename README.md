@@ -29,7 +29,11 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install git+https://github.com/0belous/A2-Legacy-Launcher.git`
 
-5. Provide it with an APK and OBB to install
+5. Run the script
+
+   `a2ll`
+
+7. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
