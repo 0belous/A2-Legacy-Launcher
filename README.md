@@ -5,14 +5,14 @@ A small script to patch Orion Drift APKs to run offline.
 
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
-> [!NOTE]
-> Linux users see linux.md
-
 ## Dependencies
 - Python 3
 
 ## Get started
 
+<details>
+   <summary>Windows instructions:</summary>
+   
 **Install:**
 
 1. Install pipx
@@ -35,16 +35,50 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 7. If you are prompted to install java follow the instructions and restart your command prompt after.
 
-8. Provide it with an APK and OBB to install
+8. Provide an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+</details>
+
+<details>
+   <summary>Debian instructions:</summary>
+   
+   **Install:**
+
+1. Insall pipx
+
+   `sudo apt install pipx`
+
+2. Add pipx to PATH
+
+   `pipx ensurepath`
+
+4. Install legacy launcher
+
+   `pipx install a2-legacy-launcher`
+
+5. Install java
+
+   `sudo apt install openjdk-21-jdk`
+
+7. Run the script
+
+   `a2ll`
+
+8. If you are prompted to install java follow the instructions and restart your command prompt after.
+
+9. Provide an APK and OBB to install
+
+    All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+
+</details>
 
 ## Usage
 
 ```
 USAGE:
-py main.py [no parameters: interactive mode]
-py main.py [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
+a2ll [no parameters: interactive mode]
+a2ll [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
 ```
 
 ## How does it work?
