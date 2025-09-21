@@ -6,10 +6,11 @@ A small script to patch Orion Drift APKs to run offline.
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
 > [!NOTE]
-> This project has NOT been extensively tested, please report bugs in [issues](https://github.com/0belous/A2-Legacy-Launcher/issues)
+> This script is not compatible with linux, if you manage to make it work feel free to create a pull request.
 
 ## Dependencies
 - Python 3
+- Java 17+
 
 ## Get started
 
@@ -17,6 +18,8 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 - Open cmd (without admin)
 - `cd Documents`
+
+**Install:**
 
 1. Clone this repo
 
@@ -28,22 +31,34 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 4. Connect your headset and autorize usb debugging (developer mode required)
 
-5. Run the script
+5. Setup a virtual enviroment (venv)
+  
+   `py -m venv venv`
+
+8. Activate the venv
+  
+   `.\venv\Scripts\activate`
+
+9. Install the requests library
+   
+   `pip install requests`
+
+10. Run the script
 
     `py main.py`
 
-6. Provide it with an APK and OBB to install
+11. Provide it with an APK and OBB to install
 
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
 ## Usage
-`./main.ps1` Interactive installer, drag and drop files
+`py main.py` Interactive installer, drag and drop files
 
 Alternatively you can use arguments
 ```
 USAGE:
-./main.ps1 (no parameters, interactive mode)
-./main.ps1 [-apk <path_to_apk>] [-obb <path_to_obb>] [-ini <path_to_ini>] [-help]
+py main.py [no parameters: interactive mode]
+py main.py [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
 ```
 
 ## How does it work?
