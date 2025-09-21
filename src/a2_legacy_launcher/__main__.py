@@ -231,12 +231,12 @@ def get_connected_device():
     else:
         print_error("No authorized ADB device found. Check headset for an authorization prompt.")
 
-def process_apk(apk_path):
+def process_apk(apk_path, java_path):
     print_info("Decompiling APK...")
-    run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+    run_command([java_path, "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
     
     print_info("Recompiling APK with debug flag...")
-    run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
+    run_command([java_path, "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
 
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
@@ -294,6 +294,11 @@ def main():
     args = parser.parse_args()
 
     print(BANNER)
+
+    java_executable_path = get_java_path()
+    if not java_executable_path:
+        print_error("Could not find or install a valid Java runtime. Please install Java 17+ and ensure it's in your PATH.")
+        sys.exit(1)
     
     is_manual_mode = any([args.apk, args.obb, args.ini])
 
@@ -301,11 +306,6 @@ def main():
         setup_sdk()
     else:
         print_success("Android SDK found")
-
-    java_executable_path = get_java_path()
-    if not java_executable_path:
-        print_error("Could not find or install a valid Java runtime. Please install Java 17+ and ensure it's in your PATH.")
-        sys.exit(1)
     
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"{APKTOOL_JAR} not found. Please download it and place it in the same directory as this script.")
