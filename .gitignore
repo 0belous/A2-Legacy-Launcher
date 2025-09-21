@@ -2,3 +2,5 @@ android-sdk/
 tmp/
 *.obb
 *.apk
+__pycache__/
+a2_legacy_launcher.egg-info/

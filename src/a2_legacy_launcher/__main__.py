@@ -68,6 +68,13 @@ def print_error(message, exit_code=1):
     if exit_code is not None:
         sys.exit(exit_code)
 
+def get_app_data_dir():
+    """Gets a reliable directory to store app data like the portable JRE."""
+    home = os.path.expanduser("~")
+    data_dir = os.path.join(home, ".a2-legacy-launcher")
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
 def run_command(command, suppress_output=False, env=None):
     try:
         process = subprocess.run(
@@ -122,12 +129,47 @@ def clean_temp_dir():
         shutil.rmtree(TEMP_DIR)
     os.makedirs(TEMP_DIR)
 
-def check_java():
-    try:
-        run_command(["java", "-version"], suppress_output=True)
-        print_success("Java detected")
-    except Exception:
-        print_error("Java not found in path. Please install the Java Development Kit (JDK) and ensure it's in your PATH.")
+
+def get_java_path():
+    system_java = shutil.which("java")
+
+    if system_java:
+        print_info(f"Found system Java at: {system_java}")
+        return system_java
+    app_data_dir = get_app_data_dir()
+    jre_dir = os.path.join(app_data_dir, "jre-17")
+
+    if platform.system() == "Windows":
+        java_executable = os.path.join(jre_dir, "bin", "java.exe")
+    else:
+        java_executable = os.path.join(jre_dir, "bin", "java")
+
+    if os.path.exists(java_executable):
+        print_info(f"Found portable Java at: {java_executable}")
+        return java_executable
+    print_error("Java not found. A portable version will be downloaded.", exit_code=None)
+    
+    if platform.system() == "Windows" and platform.machine().endswith('64'):
+        url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip"
+        archive_path = os.path.join(app_data_dir, "jre.zip")
+    else:
+        print_error(f"Automatic java download not supported for your OS ({platform.system()}). Please install Java 17+ manually.")
+        return None
+    download_with_progress(url, archive_path)
+    print_info(f"Extracting JRE to {jre_dir}...")
+    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+        top_level_dir = zip_ref.namelist()[0].split('/')[0]
+        zip_ref.extractall(app_data_dir)
+        os.rename(os.path.join(app_data_dir, top_level_dir), jre_dir)
+
+    os.remove(archive_path)
+    print_success("Portable JRE setup complete.")
+
+    if os.path.exists(java_executable):
+        return java_executable
+    else:
+        print_error("Failed to setup portable JRE.")
+        return None
 
 def download_with_progress(url, filename):
     print_info(f"Downloading {filename} from {url}...")
@@ -260,7 +302,10 @@ def main():
     else:
         print_success("Android SDK found")
 
-    check_java()
+    java_executable_path = get_java_path()
+    if not java_executable_path:
+        print_error("Could not find or install a valid Java runtime. Please install Java 17+ and ensure it's in your PATH.")
+        sys.exit(1)
     
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"{APKTOOL_JAR} not found. Please download it and place it in the same directory as this script.")
