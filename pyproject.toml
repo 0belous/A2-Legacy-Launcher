@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a2-legacy-launcher"
+version = "1.0.10"
+description = "A script to run Orion Drift offline"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name = "Obelous", email = "1@obelous.dev" },
+]
+dependencies = [
+    "requests"
+]
+
+[project.scripts]
+a2ll = "a2_legacy_launcher.__main__:main"
+
+[tool.setuptools.package-data]
+a2_legacy_launcher = ["*.jar", "*.keystore", "*.ini"]

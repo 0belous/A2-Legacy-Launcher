@@ -6,13 +6,35 @@ import shutil
 import requests
 import zipfile
 import platform
+from importlib import resources
 
-SDK_ROOT = "android-sdk"
+try:
+    from importlib.resources import files
+    KEYSTORE_FILE_REF = files('a2_legacy_launcher').joinpath('dev.keystore')
+    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath('apktool_2.12.0.jar')
+except ImportError:
+    from importlib.resources import path as resource_path
+    KEYSTORE_FILE_REF = resource_path('a2_legacy_launcher', 'dev.keystore')
+    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', 'apktool_2.12.0.jar')
+
+with resources.as_file(KEYSTORE_FILE_REF) as keystore_path:
+    KEYSTORE_FILE = str(keystore_path)
+with resources.as_file(APKTOOL_JAR_REF) as apktool_path:
+    APKTOOL_JAR = str(apktool_path)
+
+def get_app_data_dir():
+    home = os.path.expanduser("~")
+    data_dir = os.path.join(home, ".a2-legacy-launcher")
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+APP_DATA_DIR = get_app_data_dir()
+SDK_ROOT = os.path.join(APP_DATA_DIR, "android-sdk")
+TEMP_DIR = os.path.join(APP_DATA_DIR, "tmp")
+
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
-KEYSTORE_FILE = "dev.keystore"
 KEYSTORE_PASS = "com.AnotherAxiom.A2"
-APKTOOL_JAR = "apktool_2.12.0.jar"
 
 is_windows = platform.system() == "Windows"
 exe_ext = ".exe" if is_windows else ""
@@ -24,14 +46,13 @@ BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
 ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
 APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{bat_ext}")
 
-TEMP_DIR = "tmp"
 DECOMPILED_DIR = os.path.join(TEMP_DIR, "decompiled")
 COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
 
 CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
-CMD_TOOLS_ZIP = "commandlinetools.zip"
+CMD_TOOLS_ZIP = os.path.join(APP_DATA_DIR, "commandlinetools.zip")
 
 BANNER = r"""
      _    ____    _     _____ ____    _    ______   __  _        _   _   _ _   _  ____ _   _ _____ ____  
@@ -40,8 +61,6 @@ BANNER = r"""
   / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ < 
  /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
 """
-
-# A2 Legacy Launcher by Obelous
 
 def print_info(message):
     print(f"[INFO] {message}")
@@ -56,33 +75,22 @@ def print_error(message, exit_code=1):
 
 def run_command(command, suppress_output=False, env=None):
     try:
-        process = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            capture_output=True,
-            env=env
-        )
+        process = subprocess.run(command, check=True, text=True, capture_output=True, env=env)
         if not suppress_output and process.stdout:
             print(process.stdout.strip())
         return process.stdout.strip()
     except FileNotFoundError:
-        if command[0] == ADB_PATH or command[0] == SDK_MANAGER_PATH or command[0] == ZIPALIGN_PATH or command[0] == APKSIGNER_PATH:
+        if command[0] in [ADB_PATH, SDK_MANAGER_PATH, ZIPALIGN_PATH, APKSIGNER_PATH]:
             print_info(f"Required SDK component not found: {command[0]}. Re-initializing SDK setup.")
             if os.path.exists(SDK_ROOT):
                 shutil.rmtree(SDK_ROOT)
             setup_sdk()
-            print_info(f"SDK Redownloaded: re-run the script.")
+            print_info("SDK Redownloaded: re-run the script.")
             sys.exit()
         else:
             print_error(f"Command not found: {command[0]}. Please ensure it's installed and in your PATH.")
     except subprocess.CalledProcessError as e:
-        error_message = (
-            f"Command failed with exit code {e.returncode}:\n"
-            f">>> {' '.join(command)}\n"
-            f"--- STDOUT ---\n{e.stdout.strip()}\n"
-            f"--- STDERR ---\n{e.stderr.strip()}"
-        )
+        error_message = (f"Command failed with exit code {e.returncode}:\n>>> {' '.join(command)}\n--- STDOUT ---\n{e.stdout.strip()}\n--- STDERR ---\n{e.stderr.strip()}")
         print_error(error_message)
     except Exception as e:
         print_error(f"An unexpected error occurred: {e}")
@@ -108,13 +116,6 @@ def clean_temp_dir():
         shutil.rmtree(TEMP_DIR)
     os.makedirs(TEMP_DIR)
 
-def check_java():
-    try:
-        run_command(["java", "-version"], suppress_output=True)
-        print_success("Java detected")
-    except Exception:
-        print_error("Java not found in path. Please install the Java Development Kit (JDK) and ensure it's in your PATH.")
-
 def download_with_progress(url, filename):
     print_info(f"Downloading {filename} from {url}...")
     try:
@@ -132,33 +133,55 @@ def download_with_progress(url, filename):
         print_error(f"Failed to download file: {e}")
         return False
 
+def check_and_install_java():
+    if shutil.which("java"):
+        print_success("Java detected")
+        return
+
+    print_error("Java not found. The Java Runtime Environment (JRE) is required.", exit_code=None)
+    
+    if is_windows:
+        url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.msi"
+        installer_path = os.path.join(APP_DATA_DIR, "OpenJDK.msi")
+        
+        if not download_with_progress(url, installer_path):
+            print_error("Failed to download Java installer. Please install it manually.")
+            return
+
+        print_info("Running the Java installer... Please accept the UAC prompt and follow the installation steps.")
+        run_interactive_command(["msiexec", "/i", installer_path])
+        
+        print_success("Java installation finished.")
+        os.remove(installer_path)
+    else:
+        print_error("Automatic Java installation is not supported on this OS. Please install Java 17+ manually.")
+        sys.exit(1)
+
+    print_info("Please re-open command prompt and run the a2ll again.")
+    os.system("exit")
+
 def setup_sdk():
     print_info("Android SDK not found. Starting automatic setup...")
     if not download_with_progress(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
         return
-
+    
     print_info(f"Extracting {CMD_TOOLS_ZIP}...")
     if os.path.exists(SDK_ROOT):
         shutil.rmtree(SDK_ROOT)
     
     with zipfile.ZipFile(CMD_TOOLS_ZIP, 'r') as zip_ref:
-        temp_extract = "temp_extract_sdk"
+        temp_extract = os.path.join(APP_DATA_DIR, "temp_extract_sdk")
         zip_ref.extractall(temp_extract)
-        shutil.move(os.path.join(temp_extract, "cmdline-tools"), os.path.join(os.getcwd(), SDK_ROOT, "cmdline-tools"))
+        shutil.move(os.path.join(temp_extract, "cmdline-tools"), os.path.join(SDK_ROOT, "cmdline-tools"))
         shutil.rmtree(temp_extract)
 
-    print_info("Cleaning up downloaded zip file...")
     os.remove(CMD_TOOLS_ZIP)
 
     print_info("Installing platform-tools...")
-    run_interactive_command(
-        [SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", "platform-tools"]
-    )
+    run_interactive_command([SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", "platform-tools"])
     
     print_info(f"Installing build-tools;{BUILD_TOOLS_VERSION}...")
-    run_interactive_command(
-        [SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", f"build-tools;{BUILD_TOOLS_VERSION}"]
-    )
+    run_interactive_command([SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", f"build-tools;{BUILD_TOOLS_VERSION}"])
     
     print_success("Android SDK setup complete.")
 
@@ -166,7 +189,6 @@ def get_connected_device():
     print_info("Looking for connected devices...")
     output = run_command([ADB_PATH, "devices"])
     devices = [line.split('\t')[0] for line in output.strip().split('\n')[1:] if "device" in line and "unauthorized" not in line]
-
     if len(devices) == 1:
         print_success(f"Found one connected device: {devices[0]}")
         return devices[0]
@@ -178,24 +200,19 @@ def get_connected_device():
 def process_apk(apk_path):
     print_info("Decompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
-    
     print_info("Recompiling APK with debug flag...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
-
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
-
     print_info("Signing APK...")
     signing_env = os.environ.copy()
     signing_env["KEYSTORE_PASSWORD"] = KEYSTORE_PASS
     run_command([APKSIGNER_PATH, "sign", "--ks", KEYSTORE_FILE, "--ks-pass", f"env:KEYSTORE_PASSWORD", "--out", SIGNED_APK, ALIGNED_APK], env=signing_env)
-    
     print_success("APK processing complete.")
 
 def install_modded_apk(device_id):
     print_info(f"Uninstalling {PACKAGE_NAME}...")
     subprocess.run([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME], check=False, capture_output=True)
-
     print_info("Installing modified APK...")
     run_command([ADB_PATH, "-s", device_id, "install", "-r", SIGNED_APK])
     print_success("Installation complete.")
@@ -204,7 +221,6 @@ def upload_obb(device_id, obb_file):
     destination_dir = f"/sdcard/Android/obb/{PACKAGE_NAME}/"
     print_info(f"Creating OBB directory on device: {destination_dir}")
     run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
-    
     print_info(f"Uploading OBB file to {destination_dir}...")
     run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_dir])
     print_success("OBB upload complete.")
@@ -213,7 +229,6 @@ def push_ini(device_id, ini_file):
     print_info("Pushing INI file...")
     tmp_ini_path = "/data/local/tmp/Engine.ini"
     run_command([ADB_PATH, "-s", device_id, "push", ini_file, tmp_ini_path])
-
     target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
     
     shell_command = f"""
@@ -228,33 +243,29 @@ def push_ini(device_id, ini_file):
     print_success("INI file pushed successfully.")
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Orion Drift Legacy Launcher by Obelous",
-        formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-a", "--apk", help="Path to the source APK file.")
     parser.add_argument("-o", "--obb", help="Path to the OBB file.")
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
     args = parser.parse_args()
 
     print(BANNER)
-    
-    is_manual_mode = any([args.apk, args.obb, args.ini])
+
+    check_and_install_java()
 
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
     else:
         print_success("Android SDK found")
-
-    check_java()
     
     if not os.path.exists(APKTOOL_JAR):
-        print_error(f"{APKTOOL_JAR} not found. Please download it and place it in the same directory as this script.")
+        print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):
-        print_error(f"{KEYSTORE_FILE} not found. Please ensure it's in the same directory.")
+        print_error(f"Packaged component {KEYSTORE_FILE} not found.")
 
     device_id = get_connected_device()
 
+    is_manual_mode = any([args.apk, args.obb, args.ini])
     if is_manual_mode:
         if args.apk:
             apk_path = args.apk
@@ -280,7 +291,6 @@ def main():
             push_ini(device_id, ini_path)
     else:
         clean_temp_dir()
-
         apk_path = parse_file_drop(input("Drag and drop the APK you want to use onto this terminal, then press Enter: "))
         if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
@@ -305,21 +315,31 @@ def main():
         print("[4] - Custom: provide a custom ini file")
         choice = input("Enter 1-4 to pick which ini file to use (press Enter for default): ").strip()
         
+        ini_file_name = None
         if choice == "1" or not choice:
-            ini_path = "Engine.ini"
+            ini_file_name = "Engine.ini"
         elif choice == "2":
-            ini_path = "EngineVegas.ini"
+            ini_file_name = "EngineVegas.ini"
         elif choice == "3":
-            ini_path = "Engine4v4.ini"
+            ini_file_name = "Engine4v4.ini"
         elif choice == "4":
             ini_path = parse_file_drop(input("Drag and drop your custom .ini file here, then press Enter: "))
         else:
             print_error("Invalid option.")
+
+        if ini_file_name:
+            try:
+                with resources.as_file(files('a2_legacy_launcher').joinpath(ini_file_name)) as p:
+                    ini_path = str(p)
+            except (ImportError, AttributeError):
+                with resources.path('a2_legacy_launcher', ini_file_name) as p:
+                    ini_path = str(p)
     
         if os.path.isfile(ini_path):
             push_ini(device_id, ini_path)
         else:
-            print_error(f"INI file not found: {ini_path}")
+            if ini_path:
+                print_error(f"INI file not found: {ini_path}")
 
     print("\n[DONE] All tasks complete. Have fun!")
 
