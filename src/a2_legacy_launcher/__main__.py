@@ -24,7 +24,10 @@ with resources.as_file(APKTOOL_JAR_REF) as apktool_path:
 
 def get_app_data_dir():
     home = os.path.expanduser("~")
-    data_dir = os.path.join(home, ".a2-legacy-launcher")
+    if platform.system() == "Linux":
+        data_dir = os.path.join(home, ".config", "a2-legacy-launcher")
+    else:
+        data_dir = os.path.join(home, ".a2-legacy-launcher")
     os.makedirs(data_dir, exist_ok=True)
     return data_dir
 
@@ -38,20 +41,23 @@ KEYSTORE_PASS = "com.AnotherAxiom.A2"
 
 is_windows = platform.system() == "Windows"
 exe_ext = ".exe" if is_windows else ""
-bat_ext = ".bat" if is_windows else ""
+script_ext = ".bat" if is_windows else ""
 
 ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
-SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "bin", f"sdkmanager{bat_ext}")
+SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "bin", f"sdkmanager{script_ext}")
 BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
 ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
-APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{bat_ext}")
+APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
 
 DECOMPILED_DIR = os.path.join(TEMP_DIR, "decompiled")
 COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
 
-CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
+if is_windows:
+    CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
+else:
+    CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
 CMD_TOOLS_ZIP = os.path.join(APP_DATA_DIR, "commandlinetools.zip")
 
 BANNER = r"""
@@ -107,9 +113,9 @@ def run_interactive_command(command, env=None):
 
 def parse_file_drop(raw_path):
     cleaned_path = raw_path.strip()
-    if cleaned_path.startswith('& '):
-        cleaned_path = cleaned_path[2:]
-    return cleaned_path.strip('"\'')
+    if is_windows and cleaned_path.startswith('& '):
+        cleaned_path = cleaned_path[2:].strip()
+    return cleaned_path.strip("'\"")
 
 def clean_temp_dir():
     if os.path.exists(TEMP_DIR):
@@ -153,12 +159,12 @@ def check_and_install_java():
         
         print_success("Java installation finished.")
         os.remove(installer_path)
+        print_info("Please close and re-open your terminal, then run a2ll again.")
+        sys.exit(0)
     else:
-        print_error("Automatic Java installation is not supported on this OS. Please install Java 17+ manually.")
+        print_error("Please install Java by running: 'sudo apt update && sudo apt install default-jre'", exit_code=None)
+        print_info("Once Java is installed, please re-run a2ll")
         sys.exit(1)
-
-    print_info("Please re-open command prompt and run the a2ll again.")
-    os.system("exit")
 
 def setup_sdk():
     print_info("Android SDK not found. Starting automatic setup...")
@@ -170,18 +176,25 @@ def setup_sdk():
         shutil.rmtree(SDK_ROOT)
     
     with zipfile.ZipFile(CMD_TOOLS_ZIP, 'r') as zip_ref:
-        temp_extract = os.path.join(APP_DATA_DIR, "temp_extract_sdk")
-        zip_ref.extractall(temp_extract)
-        shutil.move(os.path.join(temp_extract, "cmdline-tools"), os.path.join(SDK_ROOT, "cmdline-tools"))
-        shutil.rmtree(temp_extract)
+        zip_ref.extractall(SDK_ROOT)
+
+    if not is_windows:
+        print_info("Setting executable permissions for SDK tools...")
+        for root, _, files in os.walk(SDK_ROOT):
+            for filename in files:
+                if filename in ["sdkmanager", "adb", "apksigner", "zipalign"]:
+                    try:
+                        os.chmod(os.path.join(root, filename), 0o755)
+                    except Exception as e:
+                        print_info(f"Could not set permissions for {filename}: {e}")
 
     os.remove(CMD_TOOLS_ZIP)
 
     print_info("Installing platform-tools...")
-    run_interactive_command([SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", "platform-tools"])
+    run_interactive_command([SDK_MANAGER_PATH, "platform-tools"])
     
     print_info(f"Installing build-tools;{BUILD_TOOLS_VERSION}...")
-    run_interactive_command([SDK_MANAGER_PATH, f"--sdk_root={SDK_ROOT}", f"build-tools;{BUILD_TOOLS_VERSION}"])
+    run_interactive_command([SDK_MANAGER_PATH, f"build-tools;{BUILD_TOOLS_VERSION}"])
     
     print_success("Android SDK setup complete.")
 
