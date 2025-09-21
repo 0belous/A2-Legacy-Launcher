@@ -67,7 +67,15 @@ def run_command(command, suppress_output=False, env=None):
             print(process.stdout.strip())
         return process.stdout.strip()
     except FileNotFoundError:
-        print_error(f"Command not found: {command[0]}. Please ensure it's installed and in your PATH.")
+        if command[0] == ADB_PATH or command[0] == SDK_MANAGER_PATH or command[0] == ZIPALIGN_PATH or command[0] == APKSIGNER_PATH:
+            print_info(f"Required SDK component not found: {command[0]}. Re-initializing SDK setup.")
+            if os.path.exists(SDK_ROOT):
+                shutil.rmtree(SDK_ROOT)
+            setup_sdk()
+            print_info(f"SDK Redownloaded: re-run the script.")
+            sys.exit()
+        else:
+            print_error(f"Command not found: {command[0]}. Please ensure it's installed and in your PATH.")
     except subprocess.CalledProcessError as e:
         error_message = (
             f"Command failed with exit code {e.returncode}:\n"
@@ -141,9 +149,6 @@ def setup_sdk():
 
     print_info("Cleaning up downloaded zip file...")
     os.remove(CMD_TOOLS_ZIP)
-
-    print_info("\n>>> The Android SDK will now be installed.")
-    print_info(">>> Please press 'y' and Enter to accept the licenses when prompted.\n")
 
     print_info("Installing platform-tools...")
     run_interactive_command(
