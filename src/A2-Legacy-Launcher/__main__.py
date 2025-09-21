@@ -1,3 +1,4 @@
+
 import os
 import subprocess
 import argparse
@@ -6,13 +7,26 @@ import shutil
 import requests
 import zipfile
 import platform
+from importlib import resources
+
+try:
+    from importlib.resources import files
+    KEYSTORE_FILE_REF = files('a2_legacy_launcher').joinpath('dev.keystore')
+    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath('apktool_2.12.0.jar')
+except ImportError:
+    from importlib.resources import path as resource_path
+    KEYSTORE_FILE_REF = resource_path('a2_legacy_launcher', 'dev.keystore')
+    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', 'apktool_2.12.0.jar')
+
+with resources.as_file(KEYSTORE_FILE_REF) as keystore_path:
+    KEYSTORE_FILE = str(keystore_path)
+with resources.as_file(APKTOOL_JAR_REF) as apktool_path:
+    APKTOOL_JAR = str(apktool_path)
 
 SDK_ROOT = "android-sdk"
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
-KEYSTORE_FILE = "dev.keystore"
 KEYSTORE_PASS = "com.AnotherAxiom.A2"
-APKTOOL_JAR = "apktool_2.12.0.jar"
 
 is_windows = platform.system() == "Windows"
 exe_ext = ".exe" if is_windows else ""
