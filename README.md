@@ -79,8 +79,12 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 ```
 a2ll [no parameters: interactive mode]
-a2ll [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-help]
+a2ll [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-r --remove] [-help]
 ```
+
+If reinstalling normally does not install the latest version please run:
+
+`a2ll --remove`
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>

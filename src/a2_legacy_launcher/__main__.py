@@ -39,12 +39,12 @@ BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
 KEYSTORE_PASS = "com.AnotherAxiom.A2"
 
-is_windows = platform.system() == "Windows"
+is_windows = os.name == "nt"
 exe_ext = ".exe" if is_windows else ""
 script_ext = ".bat" if is_windows else ""
 
 ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
-SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "bin", f"sdkmanager{script_ext}")
+SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "latest", "bin", f"sdkmanager{script_ext}")
 BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
 ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
 APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
@@ -175,26 +175,38 @@ def setup_sdk():
     if os.path.exists(SDK_ROOT):
         shutil.rmtree(SDK_ROOT)
     
+    temp_extract_dir = os.path.join(APP_DATA_DIR, "temp_extract")
+    if os.path.exists(temp_extract_dir):
+        shutil.rmtree(temp_extract_dir)
+
     with zipfile.ZipFile(CMD_TOOLS_ZIP, 'r') as zip_ref:
-        zip_ref.extractall(SDK_ROOT)
+        zip_ref.extractall(temp_extract_dir)
+
+    source_tools_dir = os.path.join(temp_extract_dir, "cmdline-tools")
+    target_dir = os.path.join(SDK_ROOT, "cmdline-tools", "latest")
+
+    os.makedirs(os.path.dirname(target_dir), exist_ok=True)
+    shutil.move(source_tools_dir, target_dir)
+
+    shutil.rmtree(temp_extract_dir)
+    os.remove(CMD_TOOLS_ZIP)
+
 
     if not is_windows:
         print_info("Setting executable permissions for SDK tools...")
-        for root, _, files in os.walk(SDK_ROOT):
+        for root, _, files in os.walk(os.path.join(SDK_ROOT, "cmdline-tools", "latest")):
             for filename in files:
-                if filename in ["sdkmanager", "adb", "apksigner", "zipalign"]:
+                if filename in ["sdkmanager", "avdmanager"]:
                     try:
                         os.chmod(os.path.join(root, filename), 0o755)
                     except Exception as e:
                         print_info(f"Could not set permissions for {filename}: {e}")
 
-    os.remove(CMD_TOOLS_ZIP)
-
     print_info("Installing platform-tools...")
-    run_interactive_command([SDK_MANAGER_PATH, "platform-tools"])
+    run_interactive_command([SDK_MANAGER_PATH, "--install", "platform-tools"])
     
     print_info(f"Installing build-tools;{BUILD_TOOLS_VERSION}...")
-    run_interactive_command([SDK_MANAGER_PATH, f"build-tools;{BUILD_TOOLS_VERSION}"])
+    run_interactive_command([SDK_MANAGER_PATH, f"--install", f"build-tools;{BUILD_TOOLS_VERSION}"])
     
     print_success("Android SDK setup complete.")
 
@@ -260,6 +272,7 @@ def main():
     parser.add_argument("-a", "--apk", help="Path to the source APK file.")
     parser.add_argument("-o", "--obb", help="Path to the OBB file.")
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
+    parser.add_argument("-r", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest.")
     args = parser.parse_args()
 
     print(BANNER)
@@ -277,6 +290,27 @@ def main():
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
 
     device_id = get_connected_device()
+
+    if args.remove:
+        print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
+        
+        target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
+        shell_command = f"""
+        run-as {PACKAGE_NAME} sh -c '
+        chmod -R 777 {target_dir} 2>/dev/null;
+        '
+        """
+        
+        result = subprocess.run(
+            [ADB_PATH, "-s", device_id, "shell", shell_command],
+            capture_output=True, text=True
+        )
+
+        if result.returncode != 0:
+            print_info("Current package doesn't seem to be modded, uninstalling anyways.")
+        
+        run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
+        sys.exit(0)
 
     is_manual_mode = any([args.apk, args.obb, args.ini])
     if is_manual_mode:
