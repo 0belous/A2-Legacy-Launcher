@@ -1,7 +1,7 @@
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher
 
-A small script to patch Orion Drift APKs to run offline.
+A small script to make Orion Drift APKs run offline.
 
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
