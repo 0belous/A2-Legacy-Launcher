@@ -273,6 +273,7 @@ def main():
     parser.add_argument("-o", "--obb", help="Path to the OBB file.")
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
     parser.add_argument("-r", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest.")
+    parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
     args = parser.parse_args()
 
     print(BANNER)
@@ -310,6 +311,12 @@ def main():
             print_info("Current package doesn't seem to be modded, uninstalling anyways.")
         
         run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
+        sys.exit(0)
+
+    if args.logs:
+        print_info(f"Pulling logs...")
+        os.remove("./A2.log")
+        run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
         sys.exit(0)
 
     is_manual_mode = any([args.apk, args.obb, args.ini])
