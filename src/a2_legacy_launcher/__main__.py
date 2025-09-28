@@ -222,9 +222,35 @@ def get_connected_device():
     else:
         print_error("No authorized ADB device found. Check headset for an authorization prompt.")
 
+def modify_manifest(decompiled_dir):
+    manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
+    permissions_to_remove = [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+    ]
+    
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        modified_lines = []
+        for line in lines:
+            if any(permission in line for permission in permissions_to_remove):
+                continue
+            if 'android.hardware.microphone' in line and 'android:required="true"' in line:
+                modified_lines.append(line.replace('android:required="true"', 'android:required="false"'))
+                continue
+            modified_lines.append(line)
+        with open(manifest_path, 'w', encoding='utf-8') as f:
+            f.writelines(modified_lines)
+    except Exception as e:
+        print_error(f"Failed to modify AndroidManifest.xml: {e}")
+
 def process_apk(apk_path):
     print_info("Decompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+    print_info("Stripping permissions...")
+    modify_manifest(DECOMPILED_DIR)
     print_info("Recompiling APK with debug flag...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
@@ -315,7 +341,8 @@ def main():
 
     if args.logs:
         print_info(f"Pulling logs...")
-        os.remove("./A2.log")
+        if os.path.exists('./A2.log'):
+            os.remove("./A2.log")
         run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
         sys.exit(0)
 
@@ -395,6 +422,11 @@ def main():
             if ini_path:
                 print_error(f"INI file not found: {ini_path}")
 
+    intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
+    subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
+    subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
+    subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
+    subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.automation_disable'],capture_output=True)
     print("\n[DONE] All tasks complete. Have fun!")
 
 if __name__ == "__main__":
