@@ -1,7 +1,7 @@
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher
 
-A small script to patch Orion Drift APKs to run offline.
+A small script to make Orion Drift APKs run offline.
 
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
@@ -89,5 +89,3 @@ If reinstalling normally does not install the latest version please run:
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
 From there we can place an Engine.ini which overrides the games file letting us bypass authentication and load straight into the map without connecting to any servers.
-
-It's simple but tedious
