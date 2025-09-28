@@ -75,6 +75,10 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
 </details>
 
+To update run:
+
+`pipx upgrade a2-legacy-launcher`
+
 ## Usage
 
 ```
