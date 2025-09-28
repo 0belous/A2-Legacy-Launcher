@@ -89,5 +89,3 @@ If reinstalling normally does not install the latest version please run:
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
 From there we can place an Engine.ini which overrides the games file letting us bypass authentication and load straight into the map without connecting to any servers.
-
-It's simple but tedious
