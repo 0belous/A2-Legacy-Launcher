@@ -6,6 +6,7 @@ import shutil
 import requests
 import zipfile
 import platform
+import xml.etree.ElementTree as ET
 from importlib import resources
 
 try:
@@ -246,11 +247,68 @@ def modify_manifest(decompiled_dir):
     except Exception as e:
         print_error(f"Failed to modify AndroidManifest.xml: {e}")
 
-def process_apk(apk_path):
+def inject_so(decompiled_dir, so_filename):
+    print_info(f"Injecting {so_filename}...")
+    so_file_path = os.path.join(os.getcwd(), so_filename)
+    target_lib_dir = os.path.join(decompiled_dir, "lib", "arm64-v8a")
+    os.makedirs(target_lib_dir, exist_ok=True)
+    shutil.copy(so_file_path, os.path.join(target_lib_dir, so_filename))
+    print_success("Copied .so file successfully.")
+
+    manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
+    ns = {'android': 'http://schemas.android.com/apk/res/android'}
+    ET.register_namespace('android', ns['android'])
+    tree = ET.parse(manifest_path)
+    main_activity_name = None
+    for activity in tree.findall('.//activity'):
+        for intent_filter in activity.findall('intent-filter'):
+            if any(a.get(f'{{{ns["android"]}}}name') == 'android.intent.action.MAIN' for a in intent_filter.findall('action')):
+                main_activity_name = activity.get(f'{{{ns["android"]}}}name')
+                break
+        if main_activity_name: break
+    if not main_activity_name:
+        print_error("Could not find main activity in AndroidManifest.xml.")
+        return
+    print_info(f"Found main activity: {main_activity_name}")
+
+    smali_filename = main_activity_name.split('.')[-1] + ".smali"
+    smali_path = None
+    for root, _, files in os.walk(decompiled_dir):
+        if smali_filename in files:
+            smali_path = os.path.join(root, smali_filename)
+            break
+    if not smali_path:
+        print_error(f"Smali file '{smali_filename}' not found in decompiled folder.")
+        return
+    print_info(f"Modifying smali file: {smali_path}")
+
+    with open(smali_path, 'r+', encoding='utf-8') as f:
+        lines = f.readlines()
+        on_create_index = next((i for i, line in enumerate(lines) if ".method" in line and "onCreate(Landroid/os/Bundle;)V" in line), -1)
+        if on_create_index == -1:
+            print_error(f"Could not find 'onCreate' method in {smali_filename}.")
+            return
+        
+        lib_name = os.path.basename(so_filename)
+        if lib_name.startswith("lib"): lib_name = lib_name[3:]
+        if lib_name.endswith(".so"): lib_name = lib_name[:-3]
+        
+        smali_injection = [f'\n    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n']
+        insert_pos = on_create_index + 1
+        while lines[insert_pos].strip().startswith((".locals", ".param", ".prologue")):
+             insert_pos += 1
+        lines[insert_pos:insert_pos] = smali_injection
+        f.seek(0)
+        f.writelines(lines)
+    print_success(f"Successfully injected loadLibrary call for '{lib_name}'.")
+
+def process_apk(apk_path, args):
     print_info("Decompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
     print_info("Stripping permissions...")
     modify_manifest(DECOMPILED_DIR)
+    with open('C:\\Users\\Admin\\.a2-legacy-launcher\\tmp\\decompiled\\assets\\UECommandLine.txt', 'w') as f:
+        f.write('')
     print_info("Recompiling APK with debug flag...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
@@ -300,6 +358,10 @@ def main():
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
     parser.add_argument("-r", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest.")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
+    parser.add_argument("-c", "--commandline", help="What commandline options to inject in UECommandline.txt")
+    parser.add_argument("-so", "--so", help="Inject a custom .so file")
+    parser.add_argument("-p", "--open", action="store_true", help="Open the game once finished")
+    parser.add_argument("-s", "--strip", action="store_true", help="Strip permissions from manifest (to skip pompts)")
     args = parser.parse_args()
 
     print(BANNER)
@@ -322,19 +384,9 @@ def main():
         print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
         
         target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
-        shell_command = f"""
-        run-as {PACKAGE_NAME} sh -c '
-        chmod -R 777 {target_dir} 2>/dev/null;
-        '
-        """
+        shell_command = f"run-as {PACKAGE_NAME} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
         
-        result = subprocess.run(
-            [ADB_PATH, "-s", device_id, "shell", shell_command],
-            capture_output=True, text=True
-        )
-
-        if result.returncode != 0:
-            print_info("Current package doesn't seem to be modded, uninstalling anyways.")
+        subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
         
         run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
         sys.exit(0)
@@ -354,7 +406,7 @@ def main():
                 print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
             print_success(f"Found APK: {apk_path}")
             clean_temp_dir()
-            process_apk(apk_path)
+            process_apk(apk_path, args)
             install_modded_apk(device_id)
 
         if args.obb:
@@ -376,7 +428,7 @@ def main():
         if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
         print_success("Found APK")
-        process_apk(apk_path)
+        process_apk(apk_path, args)
         install_modded_apk(device_id)
 
         obb_path = parse_file_drop(input("Drag and drop the OBB you want to use, or press Enter to skip: "))
@@ -423,10 +475,12 @@ def main():
                 print_error(f"INI file not found: {ini_path}")
 
     intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
-    subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
-    subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
-    subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
-    subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.automation_disable'],capture_output=True)
+    if args.open:
+        print_info("Opening game...")
+        subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
+        subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
+        subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
+        subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.automation_disable'],capture_output=True)
     print("\n[DONE] All tasks complete. Have fun!")
 
 if __name__ == "__main__":

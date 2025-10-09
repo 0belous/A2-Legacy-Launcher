@@ -83,12 +83,19 @@ To update run:
 
 ```
 a2ll [no parameters: interactive mode]
-a2ll [-a --apk <path_to_apk>] [-o --obb <path_to_obb>] [-i --ini <path_to_ini>] [-r --remove] [-help]
+a2ll [-shortcut, --argument] [value]
+
+Arguments:
+-a, --apk, Location of APK to use
+-o, --obb, Location of OBB to use
+-i, --ini, Location of INI to use
+-r, --remove, Uninstall thoroughly if installing in headset doesn't work
+-p, --open, Wakes headset and opens game automatically once finished
+-s, --strip, Stripts permissions to skip permission prompts on first launch
+-l, --logs, Pull A2 logs for debugging
+-c, --commandline, Specify commandline options to pass to A2
+-so, --so, Inject a custom .so file into the APK
 ```
-
-If reinstalling normally does not install the latest version please run:
-
-`a2ll --remove`
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
