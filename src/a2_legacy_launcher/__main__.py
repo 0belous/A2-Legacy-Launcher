@@ -307,7 +307,11 @@ def process_apk(apk_path, args):
     run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
     print_info("Stripping permissions...")
     modify_manifest(DECOMPILED_DIR)
-    with open('C:\\Users\\Admin\\.a2-legacy-launcher\\tmp\\decompiled\\assets\\UECommandLine.txt', 'w') as f:
+    user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
+    appdata_base = os.path.expanduser("~")
+    ue_cmdline_path = os.path.join(appdata_base, ".a2-legacy-launcher", "tmp", "decompiled", "assets", "UECommandLine.txt")
+    os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
+    with open(ue_cmdline_path, 'w') as f:
         f.write('')
     print_info("Recompiling APK with debug flag...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
