@@ -31,12 +31,6 @@ jobs:
       - name: Bump patch version
         run: bump-my-version bump patch --allow-dirty
 
-      - name: Commit version bump
-        run: |
-          git add .
-          git commit -m "chore: bump version"
-          git push
-
       - name: Clean previous builds
         run: rm -rf dist build *.egg-info
 
