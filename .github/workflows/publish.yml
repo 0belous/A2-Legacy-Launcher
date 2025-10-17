@@ -29,12 +29,6 @@ jobs:
       - name: Bump version
         run: bump-my-version bump patch
 
-      - name: Commit bumped version
-        run: |
-          git add .
-          git commit -m "chore: bump version"
-          git push
-
       - name: Build package
         run: python -m build
 
