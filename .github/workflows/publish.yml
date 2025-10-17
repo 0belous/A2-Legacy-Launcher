@@ -22,7 +22,7 @@ jobs:
           pip install build bump-my-version
 
       - name: Bump version
-        run: bump-my-version --increment PATCH --allow-dirty
+        run: bump-my-version bump patch
 
       - name: Commit bumped version
         run: |
