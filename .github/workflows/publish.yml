@@ -21,13 +21,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install build bump-my-version
 
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
       - name: Bump version
         run: bump-my-version bump patch
 
       - name: Commit bumped version
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
           git add .
           git commit -m "chore: bump version"
           git push
