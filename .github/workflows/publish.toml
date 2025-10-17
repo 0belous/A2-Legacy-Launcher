@@ -1,5 +1,4 @@
 name: Bump Version and Publish
-
 on:
   push:
     branches:
