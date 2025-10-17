@@ -1,3 +1,3 @@
-rmdir /s /q dist
-python -m build
+rm -rf dist
+python3 -m build
 twine upload dist/*
