@@ -62,10 +62,10 @@ else:
 CMD_TOOLS_ZIP = os.path.join(APP_DATA_DIR, "commandlinetools.zip")
 
 BANNER = r"""
-     _    ____    _     _____ ____    _    ______   __  _        _   _   _ _   _  ____ _   _ _____ ____  
-    / \  |___ \  | |   | ____/ ___|  / \  / ___\ \ / / | |      / \ | | | | \ | |/ ___| | | | ____|  _ \ 
+     _    ____    _     _____ ____    _    ______   __  _        _   _   _ _   _  ____ _   _ _____ ____
+    / \  |___ \  | |   | ____/ ___|  / \  / ___\ \ / / | |      / \ | | | | \ | |/ ___| | | | ____|  _ \
    / _ \   __) | | |   |  _|| |  _  / _ \| |    \ V /  | |     / _ \| | | |  \| | |   | |_| |  _| | |_) |
-  / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ < 
+  / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ <
  /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
 """
 
@@ -250,9 +250,12 @@ def modify_manifest(decompiled_dir):
 def inject_so(decompiled_dir, so_filename):
     print_info(f"Injecting {so_filename}...")
     so_file_path = os.path.join(os.getcwd(), so_filename)
+    if not os.path.exists(so_file_path):
+        print_error(f"Could not find .so file: {so_file_path}")
+
     target_lib_dir = os.path.join(decompiled_dir, "lib", "arm64-v8a")
     os.makedirs(target_lib_dir, exist_ok=True)
-    shutil.copy(so_file_path, os.path.join(target_lib_dir, so_filename))
+    shutil.copy(so_file_path, os.path.join(target_lib_dir, os.path.basename(so_filename)))
     print_success("Copied .so file successfully.")
 
     manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
@@ -293,7 +296,11 @@ def inject_so(decompiled_dir, so_filename):
         if lib_name.startswith("lib"): lib_name = lib_name[3:]
         if lib_name.endswith(".so"): lib_name = lib_name[:-3]
         
-        smali_injection = [f'\n    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n']
+        smali_injection = [
+            '\n',
+            f'    const-string v0, "{lib_name}"\n',
+            '    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n'
+        ]
         insert_pos = on_create_index + 1
         while lines[insert_pos].strip().startswith((".locals", ".param", ".prologue")):
              insert_pos += 1
