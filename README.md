@@ -93,8 +93,9 @@ Arguments:
 -p, --open, Wakes headset and opens game automatically once finished
 -s, --strip, Stripts permissions to skip permission prompts on first launch
 -l, --logs, Pull A2 logs for debugging
--c, --commandline, Specify commandline options to pass to A2
+-c="", --commandline="", Specify commandline options to pass to A2
 -so, --so, Inject a custom .so file into the APK
+-b, --usecache, Skip decompilation and use previously decompiled files to save time
 ```
 
 ## How does it work?
