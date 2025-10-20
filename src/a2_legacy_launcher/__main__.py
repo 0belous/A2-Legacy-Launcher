@@ -310,16 +310,23 @@ def inject_so(decompiled_dir, so_filename):
     print_success(f"Successfully injected loadLibrary call for '{lib_name}'.")
 
 def process_apk(apk_path, args):
-    print_info("Decompiling APK...")
-    run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
-    print_info("Stripping permissions...")
-    modify_manifest(DECOMPILED_DIR)
-    user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
-    appdata_base = os.path.expanduser("~")
-    ue_cmdline_path = os.path.join(appdata_base, ".a2-legacy-launcher", "tmp", "decompiled", "assets", "UECommandLine.txt")
-    os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
-    with open(ue_cmdline_path, 'w') as f:
-        f.write('')
+    if not args.usecache:
+        print_info("Decompiling APK...")
+        run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+    else:
+        os.remove(COMPILED_APK)
+        os.remove(ALIGNED_APK)
+        os.remove(SIGNED_APK)
+    if args.strip:
+        print_info("Stripping permissions...")
+        modify_manifest(DECOMPILED_DIR)
+    if args.commandline:
+        user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
+        appdata_base = os.path.expanduser("~")
+        ue_cmdline_path = os.path.join(appdata_base, ".a2-legacy-launcher", "tmp", "decompiled", "assets", "UECommandLine.txt")
+        os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
+        with open(ue_cmdline_path, 'w') as f:
+            f.write(args.commandline)
     print_info("Recompiling APK with debug flag...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
@@ -373,6 +380,7 @@ def main():
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-p", "--open", action="store_true", help="Open the game once finished")
     parser.add_argument("-s", "--strip", action="store_true", help="Strip permissions from manifest (to skip pompts)")
+    parser.add_argument("-b", "--usecache", action="store_true", help="Skip deleting build cache and re-decompiling")
     args = parser.parse_args()
 
     print(BANNER)
@@ -416,7 +424,8 @@ def main():
             if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
                 print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
             print_success(f"Found APK: {apk_path}")
-            clean_temp_dir()
+            if not args.usecache:
+                clean_temp_dir()
             process_apk(apk_path, args)
             install_modded_apk(device_id)
 
