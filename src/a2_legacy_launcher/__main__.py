@@ -433,16 +433,6 @@ def main():
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
     print(BANNER)
-    check_and_install_java()
-    if not os.path.exists(SDK_MANAGER_PATH):
-        setup_sdk()
-    else:
-        print_success("Android SDK found")
-    if not os.path.exists(APKTOOL_JAR):
-        print_error(f"Packaged component {APKTOOL_JAR} not found.")
-    if not os.path.exists(KEYSTORE_FILE):
-        print_error(f"Packaged component {KEYSTORE_FILE} not found.")
-    device_id = get_connected_device()
     if args.remove:
         print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
         
@@ -463,6 +453,16 @@ def main():
         shutil.rmtree(CACHE_DIR)
         shutil.rmtree(TEMP_DIR)
         sys.exit(0)
+    check_and_install_java()
+    if not os.path.exists(SDK_MANAGER_PATH):
+        setup_sdk()
+    else:
+        print_success("Android SDK found")
+    if not os.path.exists(APKTOOL_JAR):
+        print_error(f"Packaged component {APKTOOL_JAR} not found.")
+    if not os.path.exists(KEYSTORE_FILE):
+        print_error(f"Packaged component {KEYSTORE_FILE} not found.")
+    device_id = get_connected_device()
     apk_path = get_path_from_input(args.apk, "apk")
     if apk_path:
         if not apk_path.lower().endswith(".apk"):
