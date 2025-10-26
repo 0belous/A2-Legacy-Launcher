@@ -6,3 +6,4 @@ __pycache__/
 a2_legacy_launcher.egg-info/
 dist/
 A2.log
+test.ini
