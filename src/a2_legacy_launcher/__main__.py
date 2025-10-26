@@ -312,11 +312,14 @@ def inject_so(decompiled_dir, so_filename):
 def process_apk(apk_path, args):
     if not args.usecache:
         print_info("Decompiling APK...")
-        run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+        run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
     else:
-        os.remove(COMPILED_APK)
-        os.remove(ALIGNED_APK)
-        os.remove(SIGNED_APK)
+        try:
+            os.remove(COMPILED_APK)
+            os.remove(ALIGNED_APK)
+            os.remove(SIGNED_APK)
+        except:
+            print_info("")
     if args.strip:
         print_info("Stripping permissions...")
         modify_manifest(DECOMPILED_DIR)
@@ -327,7 +330,7 @@ def process_apk(apk_path, args):
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
-    print_info("Recompiling APK with debug flag...")
+    print_info("Recompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
@@ -371,16 +374,17 @@ def push_ini(device_id, ini_file):
 
 def main():
     parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path to the source APK file.")
-    parser.add_argument("-o", "--obb", help="Path to the OBB file.")
-    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
-    parser.add_argument("-r", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest.")
-    parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
-    parser.add_argument("-c", "--commandline", help="What commandline options to inject in UECommandline.txt")
+    parser.add_argument("-a", "--apk", help="Path to the source APK file", required=True)
+    parser.add_argument("-o", "--obb", help="Path to the OBB file")
+    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file")
+    parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-p", "--open", action="store_true", help="Open the game once finished")
-    parser.add_argument("-s", "--strip", action="store_true", help="Strip permissions from manifest (to skip pompts)")
-    parser.add_argument("-b", "--usecache", action="store_true", help="Skip deleting build cache and re-decompiling")
+    parser.add_argument("-lr", "--loadreplay", help="Path to .a2replay file to load")
+    parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
+    parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
+    parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
+    parser.add_argument("-sp", "--strip", action="store_true", help="Strip permissions to skip pompts on first launch")
+    parser.add_argument("-uc", "--usecache", action="store_true", help="Reuse previously decompiled files")
     args = parser.parse_args()
 
     print(BANNER)
@@ -417,82 +421,31 @@ def main():
         run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
         sys.exit(0)
 
-    is_manual_mode = any([args.apk, args.obb, args.ini])
-    if is_manual_mode:
-        if args.apk:
-            apk_path = args.apk
-            if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
-                print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
-            print_success(f"Found APK: {apk_path}")
-            if not args.usecache:
-                clean_temp_dir()
-            process_apk(apk_path, args)
-            install_modded_apk(device_id)
-
-        if args.obb:
-            obb_path = args.obb
-            if not os.path.isfile(obb_path) or not obb_path.lower().endswith(".obb"):
-                print_error(f"Invalid OBB path: File does not exist or is not an .obb file.\nPath: '{obb_path}'")
-            print_success(f"Found OBB: {obb_path}")
-            upload_obb(device_id, obb_path)
-
-        if args.ini:
-            ini_path = args.ini
-            if not os.path.isfile(ini_path):
-                 print_error(f"Invalid INI path: File does not exist.\nPath: '{ini_path}'")
-            print_success(f"Found INI: {ini_path}")
-            push_ini(device_id, ini_path)
-    else:
-        clean_temp_dir()
-        apk_path = parse_file_drop(input("Drag and drop the APK you want to use onto this terminal, then press Enter: "))
+    if args.apk:
+        apk_path = args.apk
         if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
-            print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
-        print_success("Found APK")
+            print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
+        print_success(f"Found APK: {apk_path}")
+        if not args.usecache:
+            clean_temp_dir()
+        else:
+            clean_temp_dir() # Still clean temp for now
         process_apk(apk_path, args)
         install_modded_apk(device_id)
 
-        obb_path = parse_file_drop(input("Drag and drop the OBB you want to use, or press Enter to skip: "))
-        if obb_path:
-            if os.path.isfile(obb_path) and obb_path.lower().endswith(".obb"):
-                print_success("Found OBB")
-                upload_obb(device_id, obb_path)
-            else:
-                print_error("OBB file not found or invalid. Continuing without OBB.", exit_code=None)
-        else:
-            print_info("Skipping OBB upload.")
+    if args.obb:
+        obb_path = args.obb
+        if not os.path.isfile(obb_path) or not obb_path.lower().endswith(".obb"):
+            print_error(f"Invalid OBB path: File does not exist or is not an .obb file.\nPath: '{obb_path}'")
+        print_success(f"Found OBB: {obb_path}")
+        upload_obb(device_id, obb_path)
 
-        ini_path = ""
-        print("\n[1] - Default: will work for most builds <-- Recommended")
-        print("[2] - Vegas: default level used in the vegas build")
-        print("[3] - 4v4: 4v4 level used in the competitive branch")
-        print("[4] - Custom: provide a custom ini file")
-        choice = input("Enter 1-4 to pick which ini file to use (press Enter for default): ").strip()
-        
-        ini_file_name = None
-        if choice == "1" or not choice:
-            ini_file_name = "Engine.ini"
-        elif choice == "2":
-            ini_file_name = "EngineVegas.ini"
-        elif choice == "3":
-            ini_file_name = "Engine4v4.ini"
-        elif choice == "4":
-            ini_path = parse_file_drop(input("Drag and drop your custom .ini file here, then press Enter: "))
-        else:
-            print_error("Invalid option.")
-
-        if ini_file_name:
-            try:
-                with resources.as_file(files('a2_legacy_launcher').joinpath(ini_file_name)) as p:
-                    ini_path = str(p)
-            except (ImportError, AttributeError):
-                with resources.path('a2_legacy_launcher', ini_file_name) as p:
-                    ini_path = str(p)
-    
-        if os.path.isfile(ini_path):
-            push_ini(device_id, ini_path)
-        else:
-            if ini_path:
-                print_error(f"INI file not found: {ini_path}")
+    if args.ini:
+        ini_path = args.ini
+        if not os.path.isfile(ini_path):
+                print_error(f"Invalid INI path: File does not exist.\nPath: '{ini_path}'")
+        print_success(f"Found INI: {ini_path}")
+        push_ini(device_id, ini_path)
 
     intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
     if args.open:
