@@ -419,7 +419,7 @@ def get_path_from_input(input_str, file_type):
 
 def main():
     parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path to the source APK file", required=True)
+    parser.add_argument("-a", "--apk", help="Path to the source APK file")
     parser.add_argument("-o", "--obb", help="Path to the OBB file")
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
@@ -458,6 +458,10 @@ def main():
         if os.path.exists('./A2.log'):
             os.remove("./A2.log")
         run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
+        sys.exit(0)
+    if args.clearcache:
+        shutil.rmtree(CACHE_DIR)
+        shutil.rmtree(TEMP_DIR)
         sys.exit(0)
     apk_path = get_path_from_input(args.apk, "apk")
     if apk_path:
