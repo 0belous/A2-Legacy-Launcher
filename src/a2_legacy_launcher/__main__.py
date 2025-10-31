@@ -8,6 +8,13 @@ import zipfile
 import platform
 import xml.etree.ElementTree as ET
 from importlib import resources
+import json
+import hashlib
+from urllib.parse import urlparse, unquote, parse_qs
+import urllib3
+from colorama import Fore
+from colorama import init
+init(autoreset=True)
 
 try:
     from importlib.resources import files
@@ -35,6 +42,7 @@ def get_app_data_dir():
 APP_DATA_DIR = get_app_data_dir()
 SDK_ROOT = os.path.join(APP_DATA_DIR, "android-sdk")
 TEMP_DIR = os.path.join(APP_DATA_DIR, "tmp")
+CACHE_DIR = os.path.join(APP_DATA_DIR, "cache")
 
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
@@ -54,6 +62,10 @@ DECOMPILED_DIR = os.path.join(TEMP_DIR, "decompiled")
 COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
+CACHE_INDEX = os.path.join(CACHE_DIR, "cache_index.json")
+PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini"]
+
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 if is_windows:
     CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
@@ -73,10 +85,11 @@ def print_info(message):
     print(f"[INFO] {message}")
 
 def print_success(message):
-    print(f"[SUCCESS] {message}")
+    print(Fore.GREEN + f"[SUCCESS] {message}")
 
 def print_error(message, exit_code=1):
-    print(f"[ERROR] {message}")
+    print(Fore.RED + f"[ERROR] {message}")
+
     if exit_code is not None:
         sys.exit(exit_code)
 
@@ -126,7 +139,8 @@ def clean_temp_dir():
 def download_with_progress(url, filename):
     print_info(f"Downloading {filename} from {url}...")
     try:
-        with requests.get(url, stream=True) as r:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        with requests.get(url, stream=True, verify=False) as r:
             r.raise_for_status()
             total_size = int(r.headers.get('content-length', 0))
             with open(filename, 'wb') as f:
@@ -144,20 +158,15 @@ def check_and_install_java():
     if shutil.which("java"):
         print_success("Java detected")
         return
-
     print_error("Java not found. The Java Runtime Environment (JRE) is required.", exit_code=None)
-    
     if is_windows:
         url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.msi"
         installer_path = os.path.join(APP_DATA_DIR, "OpenJDK.msi")
-        
         if not download_with_progress(url, installer_path):
             print_error("Failed to download Java installer. Please install it manually.")
             return
-
         print_info("Running the Java installer... Please accept the UAC prompt and follow the installation steps.")
         run_interactive_command(["msiexec", "/i", installer_path])
-        
         print_success("Java installation finished.")
         os.remove(installer_path)
         print_info("Please close and re-open your terminal, then run a2ll again.")
@@ -171,28 +180,20 @@ def setup_sdk():
     print_info("Android SDK not found. Starting automatic setup...")
     if not download_with_progress(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
         return
-    
     print_info(f"Extracting {CMD_TOOLS_ZIP}...")
     if os.path.exists(SDK_ROOT):
         shutil.rmtree(SDK_ROOT)
-    
     temp_extract_dir = os.path.join(APP_DATA_DIR, "temp_extract")
     if os.path.exists(temp_extract_dir):
         shutil.rmtree(temp_extract_dir)
-
     with zipfile.ZipFile(CMD_TOOLS_ZIP, 'r') as zip_ref:
         zip_ref.extractall(temp_extract_dir)
-
     source_tools_dir = os.path.join(temp_extract_dir, "cmdline-tools")
     target_dir = os.path.join(SDK_ROOT, "cmdline-tools", "latest")
-
     os.makedirs(os.path.dirname(target_dir), exist_ok=True)
     shutil.move(source_tools_dir, target_dir)
-
     shutil.rmtree(temp_extract_dir)
     os.remove(CMD_TOOLS_ZIP)
-
-
     if not is_windows:
         print_info("Setting executable permissions for SDK tools...")
         for root, _, files in os.walk(os.path.join(SDK_ROOT, "cmdline-tools", "latest")):
@@ -230,7 +231,6 @@ def modify_manifest(decompiled_dir):
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_CONNECT"
     ]
-    
     try:
         with open(manifest_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -252,12 +252,10 @@ def inject_so(decompiled_dir, so_filename):
     so_file_path = os.path.join(os.getcwd(), so_filename)
     if not os.path.exists(so_file_path):
         print_error(f"Could not find .so file: {so_file_path}")
-
     target_lib_dir = os.path.join(decompiled_dir, "lib", "arm64-v8a")
     os.makedirs(target_lib_dir, exist_ok=True)
     shutil.copy(so_file_path, os.path.join(target_lib_dir, os.path.basename(so_filename)))
     print_success("Copied .so file successfully.")
-
     manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
     ns = {'android': 'http://schemas.android.com/apk/res/android'}
     ET.register_namespace('android', ns['android'])
@@ -273,7 +271,6 @@ def inject_so(decompiled_dir, so_filename):
         print_error("Could not find main activity in AndroidManifest.xml.")
         return
     print_info(f"Found main activity: {main_activity_name}")
-
     smali_filename = main_activity_name.split('.')[-1] + ".smali"
     smali_path = None
     for root, _, files in os.walk(decompiled_dir):
@@ -284,18 +281,15 @@ def inject_so(decompiled_dir, so_filename):
         print_error(f"Smali file '{smali_filename}' not found in decompiled folder.")
         return
     print_info(f"Modifying smali file: {smali_path}")
-
     with open(smali_path, 'r+', encoding='utf-8') as f:
         lines = f.readlines()
         on_create_index = next((i for i, line in enumerate(lines) if ".method" in line and "onCreate(Landroid/os/Bundle;)V" in line), -1)
         if on_create_index == -1:
             print_error(f"Could not find 'onCreate' method in {smali_filename}.")
             return
-        
         lib_name = os.path.basename(so_filename)
         if lib_name.startswith("lib"): lib_name = lib_name[3:]
         if lib_name.endswith(".so"): lib_name = lib_name[:-3]
-        
         smali_injection = [
             '\n',
             f'    const-string v0, "{lib_name}"\n',
@@ -310,16 +304,21 @@ def inject_so(decompiled_dir, so_filename):
     print_success(f"Successfully injected loadLibrary call for '{lib_name}'.")
 
 def process_apk(apk_path, args):
-    if not args.usecache:
+    if not args.skipdecompile:
         print_info("Decompiling APK...")
-        run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+        run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
     else:
-        os.remove(COMPILED_APK)
-        os.remove(ALIGNED_APK)
-        os.remove(SIGNED_APK)
+        print_info("Skipping decompilation, using previously decompiled files.")
+        if not os.path.isdir(DECOMPILED_DIR):
+            print_error(f"Cannot skip decompilation: Directory '{DECOMPILED_DIR}' not found.")
+        for f in [COMPILED_APK, ALIGNED_APK, SIGNED_APK]:
+            if os.path.exists(f):
+                os.remove(f)
+
     if args.strip:
         print_info("Stripping permissions...")
         modify_manifest(DECOMPILED_DIR)
+
     if args.commandline:
         user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
         appdata_base = os.path.expanduser("~")
@@ -327,7 +326,13 @@ def process_apk(apk_path, args):
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
-    print_info("Recompiling APK with debug flag...")
+
+    if args.so:
+        so_path = get_path_from_input(args.so, "so")
+        if so_path:
+            inject_so(DECOMPILED_DIR, so_path)
+
+    print_info("Recompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
@@ -346,10 +351,10 @@ def install_modded_apk(device_id):
 
 def upload_obb(device_id, obb_file):
     destination_dir = f"/sdcard/Android/obb/{PACKAGE_NAME}/"
-    print_info(f"Creating OBB directory on device: {destination_dir}")
     run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
-    print_info(f"Uploading OBB file to {destination_dir}...")
-    run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_dir])
+    destination_path = os.path.join(destination_dir, os.path.basename(obb_file)).replace('\\', '/')
+    print_info(f"Uploading OBB to {destination_path}...")
+    run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
     print_success("OBB upload complete.")
 
 def push_ini(device_id, ini_file):
@@ -357,7 +362,6 @@ def push_ini(device_id, ini_file):
     tmp_ini_path = "/data/local/tmp/Engine.ini"
     run_command([ADB_PATH, "-s", device_id, "push", ini_file, tmp_ini_path])
     target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
-    
     shell_command = f"""
     run-as {PACKAGE_NAME} sh -c '
     mkdir -p {target_dir} 2>/dev/null;
@@ -369,139 +373,162 @@ def push_ini(device_id, ini_file):
     run_command([ADB_PATH, "-s", device_id, "shell", shell_command])
     print_success("INI file pushed successfully.")
 
+def get_cache_index():
+    if not os.path.exists(CACHE_INDEX):
+        return {}
+    try:
+        with open(CACHE_INDEX, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+def update_cache_index(index):
+    with open(CACHE_INDEX, 'w') as f:
+        json.dump(index, f, indent=4)
+
+def get_path_from_input(input_str, file_type):
+    if not input_str:
+        return None
+    if input_str.startswith(('http://', 'https://')):
+        url = input_str
+        cache_index = get_cache_index()
+        filename = None
+        parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
+        path_from_query = query_params.get('path', [None])[0]
+        if path_from_query:
+            potential_filename = os.path.basename(unquote(path_from_query))
+            if '.' in potential_filename:
+                filename = potential_filename
+        if not filename:
+            path_segment = unquote(parsed_url.path)
+            potential_filename = os.path.basename(path_segment)
+            if '.' in potential_filename:
+                filename = potential_filename
+        if not filename:
+            if file_type == 'obb':
+                print_error("Could not determine a valid OBB filename from the URL. Please use a direct link to the .obb file.")
+                return None
+            else:
+                url_hash = hashlib.sha256(url.encode()).hexdigest()
+                filename = f"{url_hash}.{file_type}"
+        cached_file_path = os.path.join(CACHE_DIR, filename)
+        if url in cache_index and os.path.exists(cached_file_path):
+            print_info(f"Using cached {file_type}: {cached_file_path}")
+            return cached_file_path 
+        if download_with_progress(url, cached_file_path):
+            cache_index[url] = { "path": cached_file_path }
+            update_cache_index(cache_index)
+            print_success(f"Successfully downloaded {file_type}.")
+            return cached_file_path
+        else:
+            print_error(f"Failed to download {file_type} from {url}.")
+            return None
+    if os.path.isfile(input_str):
+        print_info(f"Using local {file_type}: {input_str}")
+        return input_str
+    if file_type == 'ini' and input_str in PRESET_INI_FILES:
+        try:
+            try:
+                ini_file_ref = files('a2_legacy_launcher').joinpath(input_str)
+                with resources.as_file(ini_file_ref) as p:
+                    ini_path = str(p)
+            except (ImportError, AttributeError):
+                with resources.path('a2_legacy_launcher', input_str) as p:
+                    ini_path = str(p)
+            return ini_path
+        except Exception as e:
+            print_error(f"Could not load preset INI file '{input_str}'. It may be missing from the package. Error: {e}")
+            return None
+    error_msg = f"Invalid {file_type} input: '{input_str}'.\n"
+    if file_type == 'ini':
+        error_msg += "Please provide a valid URL, a local file path, or one of the preset names: " + ", ".join(PRESET_INI_FILES)
+    else:
+        error_msg += "Please provide a valid URL or a local file path."
+    print_error(error_msg)
+    return None
+
 def main():
     parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path to the source APK file.")
-    parser.add_argument("-o", "--obb", help="Path to the OBB file.")
-    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file.")
-    parser.add_argument("-r", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest.")
-    parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
-    parser.add_argument("-c", "--commandline", help="What commandline options to inject in UECommandline.txt")
+    parser.add_argument("-a", "--apk", help="Path to the source APK file")
+    parser.add_argument("-o", "--obb", help="Path to the OBB file")
+    parser.add_argument("-i", "--ini", help="Path to an Engine.ini. Can be a URL, local path, or a preset name (e.g., EngineVegas.ini)")
+    parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-p", "--open", action="store_true", help="Open the game once finished")
-    parser.add_argument("-s", "--strip", action="store_true", help="Strip permissions from manifest (to skip pompts)")
-    parser.add_argument("-b", "--usecache", action="store_true", help="Skip deleting build cache and re-decompiling")
+    parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
+    parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
+    parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
+    parser.add_argument("-sp", "--strip", action="store_true", help="Strip permissions to skip pompts on first launch")
+    parser.add_argument("-sk", "--skipdecompile", action="store_true", help="Reuse previously decompiled files")
+    parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
-
-    print(BANNER)
-
+    print(Fore.LIGHTYELLOW_EX + BANNER)
     check_and_install_java()
-
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
     else:
         print_success("Android SDK found")
-    
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
-
     device_id = get_connected_device()
-
+    action_performed = False
     if args.remove:
+        action_performed = True
         print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
-        
         target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
         shell_command = f"run-as {PACKAGE_NAME} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
-        
         subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-        
         run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
+        print_success(f"{PACKAGE_NAME} has been uninstalled.")
         sys.exit(0)
-
     if args.logs:
+        action_performed = True
         print_info(f"Pulling logs...")
         if os.path.exists('./A2.log'):
             os.remove("./A2.log")
         run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
+        print_success("Log file pulled to A2.log")
         sys.exit(0)
-
-    is_manual_mode = any([args.apk, args.obb, args.ini])
-    if is_manual_mode:
-        if args.apk:
-            apk_path = args.apk
-            if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
-                print_error(f"Invalid APK path: File does not exist or is not an .apk file.\nPath: '{apk_path}'")
-            print_success(f"Found APK: {apk_path}")
-            if not args.usecache:
-                clean_temp_dir()
-            process_apk(apk_path, args)
-            install_modded_apk(device_id)
-
-        if args.obb:
-            obb_path = args.obb
-            if not os.path.isfile(obb_path) or not obb_path.lower().endswith(".obb"):
-                print_error(f"Invalid OBB path: File does not exist or is not an .obb file.\nPath: '{obb_path}'")
-            print_success(f"Found OBB: {obb_path}")
-            upload_obb(device_id, obb_path)
-
-        if args.ini:
-            ini_path = args.ini
-            if not os.path.isfile(ini_path):
-                 print_error(f"Invalid INI path: File does not exist.\nPath: '{ini_path}'")
-            print_success(f"Found INI: {ini_path}")
-            push_ini(device_id, ini_path)
-    else:
-        clean_temp_dir()
-        apk_path = parse_file_drop(input("Drag and drop the APK you want to use onto this terminal, then press Enter: "))
-        if not os.path.isfile(apk_path) or not apk_path.lower().endswith(".apk"):
-            print_error(f"Invalid path: Not an APK file or file doesn't exist.\nParsed path: '{apk_path}'")
-        print_success("Found APK")
+    if args.clearcache:
+        action_performed = True
+        if os.path.exists(CACHE_DIR):
+            shutil.rmtree(CACHE_DIR)
+        if os.path.exists(TEMP_DIR):
+            shutil.rmtree(TEMP_DIR)
+        print_success("Cache and temporary files cleared.")
+        sys.exit(0)
+    if args.apk:
+        action_performed = True
+        apk_path = get_path_from_input(args.apk, "apk")
+        if not apk_path.lower().endswith(".apk"):
+            print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
+        if not args.skipdecompile:
+            clean_temp_dir()
         process_apk(apk_path, args)
         install_modded_apk(device_id)
-
-        obb_path = parse_file_drop(input("Drag and drop the OBB you want to use, or press Enter to skip: "))
-        if obb_path:
-            if os.path.isfile(obb_path) and obb_path.lower().endswith(".obb"):
-                print_success("Found OBB")
-                upload_obb(device_id, obb_path)
-            else:
-                print_error("OBB file not found or invalid. Continuing without OBB.", exit_code=None)
-        else:
-            print_info("Skipping OBB upload.")
-
-        ini_path = ""
-        print("\n[1] - Default: will work for most builds <-- Recommended")
-        print("[2] - Vegas: default level used in the vegas build")
-        print("[3] - 4v4: 4v4 level used in the competitive branch")
-        print("[4] - Custom: provide a custom ini file")
-        choice = input("Enter 1-4 to pick which ini file to use (press Enter for default): ").strip()
-        
-        ini_file_name = None
-        if choice == "1" or not choice:
-            ini_file_name = "Engine.ini"
-        elif choice == "2":
-            ini_file_name = "EngineVegas.ini"
-        elif choice == "3":
-            ini_file_name = "Engine4v4.ini"
-        elif choice == "4":
-            ini_path = parse_file_drop(input("Drag and drop your custom .ini file here, then press Enter: "))
-        else:
-            print_error("Invalid option.")
-
-        if ini_file_name:
-            try:
-                with resources.as_file(files('a2_legacy_launcher').joinpath(ini_file_name)) as p:
-                    ini_path = str(p)
-            except (ImportError, AttributeError):
-                with resources.path('a2_legacy_launcher', ini_file_name) as p:
-                    ini_path = str(p)
-    
-        if os.path.isfile(ini_path):
-            push_ini(device_id, ini_path)
-        else:
-            if ini_path:
-                print_error(f"INI file not found: {ini_path}")
-
-    intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
+    if args.obb:
+        action_performed = True
+        obb_path = get_path_from_input(args.obb, "obb")
+        if not obb_path.lower().endswith(".obb"):
+            print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{obb_path}'")
+        upload_obb(device_id, obb_path)
+    if args.ini:
+        action_performed = True
+        ini_path = get_path_from_input(args.ini, "ini")
+        push_ini(device_id, ini_path)
     if args.open:
+        action_performed = True
         print_info("Opening game...")
+        intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
         subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.automation_disable'],capture_output=True)
-    print("\n[DONE] All tasks complete. Have fun!")
+    if not action_performed:
+        print_error("No action specified. Please provide a task like --apk, --ini, etc. Use -h for help.", exit_code=0)
+    print(Fore.LIGHTYELLOW_EX + "\n[DONE] All tasks complete. Have fun!")
 
 if __name__ == "__main__":
     main()
