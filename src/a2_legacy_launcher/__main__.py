@@ -11,6 +11,10 @@ from importlib import resources
 import json
 import hashlib
 from urllib.parse import urlparse, unquote, parse_qs
+import urllib3
+from colorama import Fore
+from colorama import init
+init(autoreset=True)
 
 try:
     from importlib.resources import files
@@ -59,6 +63,7 @@ COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
 CACHE_INDEX = os.path.join(CACHE_DIR, "cache_index.json")
+PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini"]
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -80,10 +85,11 @@ def print_info(message):
     print(f"[INFO] {message}")
 
 def print_success(message):
-    print(f"[SUCCESS] {message}")
+    print(Fore.GREEN + f"[SUCCESS] {message}")
 
 def print_error(message, exit_code=1):
-    print(f"[ERROR] {message}")
+    print(Fore.RED + f"[ERROR] {message}")
+
     if exit_code is not None:
         sys.exit(exit_code)
 
@@ -133,7 +139,8 @@ def clean_temp_dir():
 def download_with_progress(url, filename):
     print_info(f"Downloading {filename} from {url}...")
     try:
-        with requests.get(url, stream=True) as r:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        with requests.get(url, stream=True, verify=False) as r:
             r.raise_for_status()
             total_size = int(r.headers.get('content-length', 0))
             with open(filename, 'wb') as f:
@@ -382,34 +389,33 @@ def update_cache_index(index):
 def get_path_from_input(input_str, file_type):
     if not input_str:
         return None
-        
     if input_str.startswith(('http://', 'https://')):
         url = input_str
-        print_info(f"URL detected for {file_type}: {url}")
         cache_index = get_cache_index()
         filename = None
         parsed_url = urlparse(url)
         query_params = parse_qs(parsed_url.query)
         path_from_query = query_params.get('path', [None])[0]
-        potential_filename = None
         if path_from_query:
             potential_filename = os.path.basename(unquote(path_from_query))
-        if not potential_filename or '.' not in potential_filename:
+            if '.' in potential_filename:
+                filename = potential_filename
+        if not filename:
             path_segment = unquote(parsed_url.path)
             potential_filename = os.path.basename(path_segment)
-        if potential_filename and '.' in potential_filename:
-            filename = potential_filename
-        if not filename or file_type in ['apk', 'ini']:
+            if '.' in potential_filename:
+                filename = potential_filename
+        if not filename:
             if file_type == 'obb':
-                if not filename:
-                    print_error("Could not determine a valid OBB filename from the provided URL. The game requires a specific filename (e.g., main.123.com.package.name.obb). Please use a direct link to the .obb file.")
+                print_error("Could not determine a valid OBB filename from the URL. Please use a direct link to the .obb file.")
+                return None
             else:
                 url_hash = hashlib.sha256(url.encode()).hexdigest()
                 filename = f"{url_hash}.{file_type}"
         cached_file_path = os.path.join(CACHE_DIR, filename)
         if url in cache_index and os.path.exists(cached_file_path):
-            print_success(f"Using cached {file_type}: {cached_file_path}")
-            return cached_file_path
+            print_info(f"Using cached {file_type}: {cached_file_path}")
+            return cached_file_path 
         if download_with_progress(url, cached_file_path):
             cache_index[url] = { "path": cached_file_path }
             update_cache_index(cache_index)
@@ -418,18 +424,35 @@ def get_path_from_input(input_str, file_type):
         else:
             print_error(f"Failed to download {file_type} from {url}.")
             return None
-    else:
-        if not os.path.isfile(input_str):
-            print_error(f"Invalid {file_type} path: File does not exist.\nPath: '{input_str}'")
-            return None
-        print_success(f"Using local {file_type}: {input_str}")
+    if os.path.isfile(input_str):
+        print_info(f"Using local {file_type}: {input_str}")
         return input_str
+    if file_type == 'ini' and input_str in PRESET_INI_FILES:
+        try:
+            try:
+                ini_file_ref = files('a2_legacy_launcher').joinpath(input_str)
+                with resources.as_file(ini_file_ref) as p:
+                    ini_path = str(p)
+            except (ImportError, AttributeError):
+                with resources.path('a2_legacy_launcher', input_str) as p:
+                    ini_path = str(p)
+            return ini_path
+        except Exception as e:
+            print_error(f"Could not load preset INI file '{input_str}'. It may be missing from the package. Error: {e}")
+            return None
+    error_msg = f"Invalid {file_type} input: '{input_str}'.\n"
+    if file_type == 'ini':
+        error_msg += "Please provide a valid URL, a local file path, or one of the preset names: " + ", ".join(PRESET_INI_FILES)
+    else:
+        error_msg += "Please provide a valid URL or a local file path."
+    print_error(error_msg)
+    return None
 
 def main():
     parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-a", "--apk", help="Path to the source APK file")
     parser.add_argument("-o", "--obb", help="Path to the OBB file")
-    parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file")
+    parser.add_argument("-i", "--ini", help="Path to an Engine.ini. Can be a URL, local path, or a preset name (e.g., EngineVegas.ini)")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
@@ -439,7 +462,7 @@ def main():
     parser.add_argument("-sk", "--skipdecompile", action="store_true", help="Reuse previously decompiled files")
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
-    print(BANNER)
+    print(Fore.LIGHTYELLOW_EX + BANNER)
     check_and_install_java()
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
@@ -450,53 +473,62 @@ def main():
     if not os.path.exists(KEYSTORE_FILE):
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
     device_id = get_connected_device()
+    action_performed = False
     if args.remove:
+        action_performed = True
         print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
-        
         target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
         shell_command = f"run-as {PACKAGE_NAME} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
-        
         subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-        
         run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
+        print_success(f"{PACKAGE_NAME} has been uninstalled.")
         sys.exit(0)
     if args.logs:
+        action_performed = True
         print_info(f"Pulling logs...")
         if os.path.exists('./A2.log'):
             os.remove("./A2.log")
         run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
+        print_success("Log file pulled to A2.log")
         sys.exit(0)
     if args.clearcache:
-        shutil.rmtree(CACHE_DIR)
-        shutil.rmtree(TEMP_DIR)
+        action_performed = True
+        if os.path.exists(CACHE_DIR):
+            shutil.rmtree(CACHE_DIR)
+        if os.path.exists(TEMP_DIR):
+            shutil.rmtree(TEMP_DIR)
+        print_success("Cache and temporary files cleared.")
         sys.exit(0)
-    apk_path = get_path_from_input(args.apk, "apk")
-    if apk_path:
+    if args.apk:
+        action_performed = True
+        apk_path = get_path_from_input(args.apk, "apk")
         if not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
         if not args.skipdecompile:
             clean_temp_dir()
-        
         process_apk(apk_path, args)
         install_modded_apk(device_id)
-    else:
-        print_error("No valid APK provided. Exiting.")
-    obb_path = get_path_from_input(args.obb, "obb")
-    if obb_path:
+    if args.obb:
+        action_performed = True
+        obb_path = get_path_from_input(args.obb, "obb")
         if not obb_path.lower().endswith(".obb"):
             print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{obb_path}'")
         upload_obb(device_id, obb_path)
-    ini_path = get_path_from_input(args.ini, "ini")
-    if ini_path:
+    if args.ini:
+        action_performed = True
+        ini_path = get_path_from_input(args.ini, "ini")
         push_ini(device_id, ini_path)
-    intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
     if args.open:
+        action_performed = True
         print_info("Opening game...")
+        intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
         subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.automation_disable'],capture_output=True)
-    print("\n[DONE] All tasks complete. Have fun!")
+    if not action_performed:
+        print_error("No action specified. Please provide a task like --apk, --ini, etc. Use -h for help.", exit_code=0)
+    print(Fore.LIGHTYELLOW_EX + "\n[DONE] All tasks complete. Have fun!")
 
 if __name__ == "__main__":
     main()
