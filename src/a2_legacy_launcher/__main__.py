@@ -450,9 +450,9 @@ def get_path_from_input(input_str, file_type):
 
 def main():
     parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path to the source APK file")
-    parser.add_argument("-o", "--obb", help="Path to the OBB file")
-    parser.add_argument("-i", "--ini", help="Path to an Engine.ini. Can be a URL, local path, or a preset name (e.g., EngineVegas.ini)")
+    parser.add_argument("-a", "--apk", help="Path/URL to the source APK file")
+    parser.add_argument("-o", "--obb", help="Path/URL to the OBB file")
+    parser.add_argument("-i", "--ini", help="Path/URL to an Engine.ini")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
