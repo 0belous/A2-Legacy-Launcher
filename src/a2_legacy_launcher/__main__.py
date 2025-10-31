@@ -301,15 +301,17 @@ def process_apk(apk_path, args):
         print_info("Decompiling APK...")
         run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
     else:
-        try:
-            os.remove(COMPILED_APK)
-            os.remove(ALIGNED_APK)
-            os.remove(SIGNED_APK)
-        except:
-            print_info("")
+        print_info("Skipping decompilation, using previously decompiled files.")
+        if not os.path.isdir(DECOMPILED_DIR):
+            print_error(f"Cannot skip decompilation: Directory '{DECOMPILED_DIR}' not found.")
+        for f in [COMPILED_APK, ALIGNED_APK, SIGNED_APK]:
+            if os.path.exists(f):
+                os.remove(f)
+
     if args.strip:
         print_info("Stripping permissions...")
         modify_manifest(DECOMPILED_DIR)
+
     if args.commandline:
         user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
         appdata_base = os.path.expanduser("~")
@@ -317,6 +319,12 @@ def process_apk(apk_path, args):
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
+
+    if args.so:
+        so_path = get_path_from_input(args.so, "so")
+        if so_path:
+            inject_so(DECOMPILED_DIR, so_path)
+
     print_info("Recompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
@@ -424,7 +432,6 @@ def main():
     parser.add_argument("-i", "--ini", help="Path to a custom Engine.ini file")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-lr", "--loadreplay", help="Path to .a2replay file to load")
     parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
     parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
@@ -433,6 +440,16 @@ def main():
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
     print(BANNER)
+    check_and_install_java()
+    if not os.path.exists(SDK_MANAGER_PATH):
+        setup_sdk()
+    else:
+        print_success("Android SDK found")
+    if not os.path.exists(APKTOOL_JAR):
+        print_error(f"Packaged component {APKTOOL_JAR} not found.")
+    if not os.path.exists(KEYSTORE_FILE):
+        print_error(f"Packaged component {KEYSTORE_FILE} not found.")
+    device_id = get_connected_device()
     if args.remove:
         print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
         
@@ -453,24 +470,13 @@ def main():
         shutil.rmtree(CACHE_DIR)
         shutil.rmtree(TEMP_DIR)
         sys.exit(0)
-    check_and_install_java()
-    if not os.path.exists(SDK_MANAGER_PATH):
-        setup_sdk()
-    else:
-        print_success("Android SDK found")
-    if not os.path.exists(APKTOOL_JAR):
-        print_error(f"Packaged component {APKTOOL_JAR} not found.")
-    if not os.path.exists(KEYSTORE_FILE):
-        print_error(f"Packaged component {KEYSTORE_FILE} not found.")
-    device_id = get_connected_device()
     apk_path = get_path_from_input(args.apk, "apk")
     if apk_path:
         if not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
         if not args.skipdecompile:
             clean_temp_dir()
-        else:
-            clean_temp_dir()
+        
         process_apk(apk_path, args)
         install_modded_apk(device_id)
     else:
