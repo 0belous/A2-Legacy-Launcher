@@ -82,20 +82,22 @@ To update run:
 ## Usage
 
 ```
-a2ll [no parameters: interactive mode]
-a2ll [-shortcut, --argument] [value]
+usage: a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
 
-Arguments:
--a, --apk, Location of APK to use
--o, --obb, Location of OBB to use
--i, --ini, Location of INI to use
--r, --remove, Uninstall thoroughly if installing in headset doesn't work
--p, --open, Wakes headset and opens game automatically once finished
--s, --strip, Stripts permissions to skip permission prompts on first launch
--l, --logs, Pull A2 logs for debugging
--c="", --commandline="", Specify commandline options to pass to A2
--so, --so, Inject a custom .so file into the APK
--b, --usecache, Skip decompilation and use previously decompiled files to save time
+options:
+  -h, --help            show this help message and exit
+  -a APK, --apk APK     Path/URL to the source APK file
+  -o OBB, --obb OBB     Path/URL to the OBB file
+  -i INI, --ini INI     Path/URL to an Engine.ini
+  -c COMMANDLINE, --commandline COMMANDLINE
+                        What commandline options to run A2 with
+  -so SO, --so SO       Inject a custom .so file
+  -rm, --remove         Use this if reinstalling doesnt bring you back to latest
+  -l, --logs            Pull game logs from the headset
+  -op, --open           Open the game once finished
+  -sp, --strip          Strip permissions to skip pompts on first launch
+  -sk, --skipdecompile  Reuse previously decompiled files
+  -cc, --clearcache     Delete cached downloads
 ```
 
 ## How does it work?
