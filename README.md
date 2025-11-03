@@ -82,7 +82,9 @@ To update run:
 ## Usage
 
 ```
-usage: a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
+a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
+
+A2 Legacy Launcher by Obelous
 
 options:
   -h, --help            show this help message and exit
@@ -92,6 +94,7 @@ options:
   -c COMMANDLINE, --commandline COMMANDLINE
                         What commandline options to run A2 with
   -so SO, --so SO       Inject a custom .so file
+  -rn, --rename         Rename the package to allow multiple installs
   -rm, --remove         Use this if reinstalling doesnt bring you back to latest
   -l, --logs            Pull game logs from the headset
   -op, --open           Open the game once finished

@@ -46,6 +46,7 @@ CACHE_DIR = os.path.join(APP_DATA_DIR, "cache")
 
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
+NEW_PACKAGE_NAME = "com.LegacyLauncher.A2"
 KEYSTORE_PASS = "com.AnotherAxiom.A2"
 
 is_windows = os.name == "nt"
@@ -247,6 +248,21 @@ def modify_manifest(decompiled_dir):
     except Exception as e:
         print_error(f"Failed to modify AndroidManifest.xml: {e}")
 
+def rename_package(decompiled_dir, old_pkg, new_pkg):
+    print_info(f"Renaming package...")
+    manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
+    yml_path = os.path.join(decompiled_dir, "apktool.yml")
+    for file_path in [manifest_path, yml_path]:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            content = content.replace(old_pkg, new_pkg)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except Exception as e:
+            print_error(f"Failed to modify {os.path.basename(file_path)}: {e}")
+    print_success("Package renaming complete.")
+
 def inject_so(decompiled_dir, so_filename):
     print_info(f"Injecting {so_filename}...")
     so_file_path = os.path.join(os.getcwd(), so_filename)
@@ -315,6 +331,9 @@ def process_apk(apk_path, args):
             if os.path.exists(f):
                 os.remove(f)
 
+    if args.rename:
+        rename_package(DECOMPILED_DIR, PACKAGE_NAME, NEW_PACKAGE_NAME)
+
     if args.strip:
         print_info("Stripping permissions...")
         modify_manifest(DECOMPILED_DIR)
@@ -342,28 +361,37 @@ def process_apk(apk_path, args):
     run_command([APKSIGNER_PATH, "sign", "--ks", KEYSTORE_FILE, "--ks-pass", f"env:KEYSTORE_PASSWORD", "--out", SIGNED_APK, ALIGNED_APK], env=signing_env)
     print_success("APK processing complete.")
 
-def install_modded_apk(device_id):
-    print_info(f"Uninstalling {PACKAGE_NAME}...")
-    subprocess.run([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME], check=False, capture_output=True)
+def install_modded_apk(device_id, package_name):
+    print_info(f"Uninstalling {package_name}...")
+    subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], check=False, capture_output=True)
     print_info("Installing modified APK...")
     run_command([ADB_PATH, "-s", device_id, "install", "-r", SIGNED_APK])
     print_success("Installation complete.")
 
-def upload_obb(device_id, obb_file):
-    destination_dir = f"/sdcard/Android/obb/{PACKAGE_NAME}/"
+def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
+    if is_renamed:
+        new_obb_name = os.path.basename(obb_file).replace(PACKAGE_NAME, effective_package_name)
+        temp_obb_path = os.path.join(TEMP_DIR, new_obb_name)
+        shutil.copy(obb_file, temp_obb_path)
+        obb_to_upload = temp_obb_path
+        final_obb_name = new_obb_name
+    else:
+        obb_to_upload = obb_file
+        final_obb_name = os.path.basename(obb_file)
+    destination_dir = f"/sdcard/Android/obb/{effective_package_name}/"
     run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
-    destination_path = os.path.join(destination_dir, os.path.basename(obb_file)).replace('\\', '/')
-    print_info(f"Uploading OBB to {destination_path}...")
-    run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
+    destination_path = os.path.join(destination_dir, final_obb_name).replace('\\', '/')
+    print_info(f"Uploading OBB...")
+    run_command([ADB_PATH, "-s", device_id, "push", obb_to_upload, destination_path])
     print_success("OBB upload complete.")
 
-def push_ini(device_id, ini_file):
+def push_ini(device_id, ini_file, package_name):
     print_info("Pushing INI file...")
     tmp_ini_path = "/data/local/tmp/Engine.ini"
     run_command([ADB_PATH, "-s", device_id, "push", ini_file, tmp_ini_path])
     target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
     shell_command = f"""
-    run-as {PACKAGE_NAME} sh -c '
+    run-as {package_name} sh -c '
     mkdir -p {target_dir} 2>/dev/null;
     chmod -R 755 {target_dir} 2>/dev/null;
     cp {tmp_ini_path} {target_dir}/Engine.ini 2>/dev/null;
@@ -415,7 +443,7 @@ def get_path_from_input(input_str, file_type):
         cached_file_path = os.path.join(CACHE_DIR, filename)
         if url in cache_index and os.path.exists(cached_file_path):
             print_info(f"Using cached {file_type}: {cached_file_path}")
-            return cached_file_path 
+            return cached_file_path
         if download_with_progress(url, cached_file_path):
             cache_index[url] = { "path": cached_file_path }
             update_cache_index(cache_index)
@@ -455,6 +483,7 @@ def main():
     parser.add_argument("-i", "--ini", help="Path/URL to an Engine.ini")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
+    parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package to allow multiple installs")
     parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
     parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
@@ -473,22 +502,24 @@ def main():
     if not os.path.exists(KEYSTORE_FILE):
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
     device_id = get_connected_device()
+    effective_package_name = NEW_PACKAGE_NAME if args.rename else PACKAGE_NAME
     action_performed = False
     if args.remove:
         action_performed = True
-        print_info(f"Attempting to uninstall {PACKAGE_NAME}...")
+        print_info(f"Attempting to uninstall {effective_package_name}...")
         target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
-        shell_command = f"run-as {PACKAGE_NAME} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
+        shell_command = f"run-as {effective_package_name} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
         subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-        run_command([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME])
-        print_success(f"{PACKAGE_NAME} has been uninstalled.")
+        run_command([ADB_PATH, "-s", device_id, "uninstall", effective_package_name])
+        print_success(f"{effective_package_name} has been uninstalled.")
         sys.exit(0)
     if args.logs:
         action_performed = True
-        print_info(f"Pulling logs...")
+        print_info(f"Pulling logs for {effective_package_name}...")
         if os.path.exists('./A2.log'):
             os.remove("./A2.log")
-        run_command([ADB_PATH, "pull", "/sdcard/Android/data/com.AnotherAxiom.A2/files/UnrealGame/A2/A2/Saved/Logs/A2.log", "./A2.log"])
+        log_path = f"/sdcard/Android/data/{effective_package_name}/files/UnrealGame/A2/A2/Saved/Logs/A2.log"
+        run_command([ADB_PATH, "pull", log_path, "./A2.log"])
         print_success("Log file pulled to A2.log")
         sys.exit(0)
     if args.clearcache:
@@ -507,21 +538,21 @@ def main():
         if not args.skipdecompile:
             clean_temp_dir()
         process_apk(apk_path, args)
-        install_modded_apk(device_id)
+        install_modded_apk(device_id, effective_package_name)
     if args.obb:
         action_performed = True
         obb_path = get_path_from_input(args.obb, "obb")
         if not obb_path.lower().endswith(".obb"):
             print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{obb_path}'")
-        upload_obb(device_id, obb_path)
+        upload_obb(device_id, obb_path, effective_package_name, args.rename)
     if args.ini:
         action_performed = True
         ini_path = get_path_from_input(args.ini, "ini")
-        push_ini(device_id, ini_path)
+        push_ini(device_id, ini_path, effective_package_name)
     if args.open:
         action_performed = True
         print_info("Opening game...")
-        intent = PACKAGE_NAME+'/com.epicgames.unreal.GameActivity'
+        intent = effective_package_name+'/com.epicgames.unreal.GameActivity'
         subprocess.run([ADB_PATH, 'shell', 'input', 'keyevent', '26'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close'],capture_output=True)
         subprocess.run([ADB_PATH, 'shell', 'am', 'start', '-n', intent],capture_output=True)
