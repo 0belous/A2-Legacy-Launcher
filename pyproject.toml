@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2-legacy-launcher"
-version = "1.0.20"
+version = "1.0.21"
 description = "A script to run Orion Drift offline"
 readme = "README.md"
 requires-python = ">=3.8"
