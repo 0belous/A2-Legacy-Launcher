@@ -102,6 +102,7 @@ options:
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
 ```
+
 #### Extra context:
 
 - `--clearcache` When providing a URL to the APK OBB or INI argument the script downloads and caches the file, to free up storage and delete cached downloads run the script with this argument.
@@ -113,6 +114,18 @@ options:
 - `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
 
 - `--ini` Supports local path, url and these presets `-i Engine.ini`, `-i EngineVegas.ini`, `-i Engine4V4.ini`, `-i EngineNetworked.ini` however nearly all builds use Engine.ini
+
+#### Example command:
+
+`a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk -o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb -i Engine.ini -c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay" -sp -op`
+
+Breakdown:
+- `-a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk` - Download 1.0.47031 APK
+- `-o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb` - Download 1.0.47031 APK
+- `-i Engine.ini` - Use Engine.ini
+- `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay"` - Load replay of AA_Trick completing the first parkour
+- `-sp` - Strip permissions
+- `-op` - Open once finished
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
