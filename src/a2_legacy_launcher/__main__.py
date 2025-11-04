@@ -261,6 +261,34 @@ def rename_package(decompiled_dir, old_pkg, new_pkg):
                 f.write(content)
         except Exception as e:
             print_error(f"Failed to modify {os.path.basename(file_path)}: {e}")
+    old_pkg_path_part = old_pkg.replace('.', os.sep)
+    new_pkg_path_part = new_pkg.replace('.', os.sep)
+    for root, _, files in os.walk(decompiled_dir):
+        for name in files:
+            file_path = os.path.join(root, name)
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                smali_old = 'L' + old_pkg.replace('.', '/')
+                smali_new = 'L' + new_pkg.replace('.', '/')
+                if smali_old in content or old_pkg in content:
+                    content = content.replace(smali_old, smali_new)
+                    content = content.replace(old_pkg, new_pkg)
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+            except Exception as e:
+                print_info(f"Could not process file {file_path}: {e}")
+    for smali_dir_name in os.listdir(decompiled_dir):
+        if smali_dir_name.startswith('smali'):
+            old_path = os.path.join(decompiled_dir, smali_dir_name, old_pkg_path_part)
+            new_path = os.path.join(decompiled_dir, smali_dir_name, new_pkg_path_part)
+            if os.path.isdir(old_path):
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                shutil.move(old_path, new_path)
+                try:
+                    os.removedirs(os.path.dirname(old_path))
+                except OSError:
+                    pass
     print_success("Package renaming complete.")
 
 def inject_so(decompiled_dir, so_filename):
