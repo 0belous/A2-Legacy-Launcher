@@ -84,7 +84,7 @@ To update run:
 ```
 a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
 
-A2 Legacy Launcher by Obelous
+A2 Legacy Launcher
 
 options:
   -h, --help            show this help message and exit
@@ -102,6 +102,15 @@ options:
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
 ```
+#### Extra context:
+
+- `--clearcache` When providing a URL to the APK OBB or INI argument the script downloads and caches the file, to free up storage and delete cached downloads run the script with this argument.
+
+- `--skipdecompile` When iterating on a single version you may wish to skip the decopilation step to save time by using the previously decompiled files, this also allows for manual modification of game files.
+
+- `--rename` This renames the package to com.LegacyLauncher.A2 to allow for multiple versions to be installed at once, but it must be used in conjunction with `-c="-useinsecure"` on a version where this argument exists.
+
+- `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
