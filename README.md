@@ -121,7 +121,7 @@ options:
 
 Breakdown:
 - `-a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk` - Download 1.0.47031 APK
-- `-o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb` - Download 1.0.47031 APK
+- `-o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb` - Download 1.0.47031 OBB
 - `-i Engine.ini` - Use Engine.ini
 - `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay"` - Load replay of AA_Trick completing the first parkour
 - `-sp` - Strip permissions
