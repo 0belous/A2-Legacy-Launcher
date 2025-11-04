@@ -1,7 +1,7 @@
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher
 
-A small script to make Orion Drift APKs run offline.
+A script to manipulate Orion Drift APKs
 
 Particularly useful when running old versions of Orion Drift that don't have servers anymore.
 
@@ -111,6 +111,8 @@ options:
 - `--rename` This renames the package to com.LegacyLauncher.A2 to allow for multiple versions to be installed at once, but it must be used in conjunction with `-c="-useinsecure"` on a version where this argument exists.
 
 - `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
+
+- `--ini` Supports local path, url and these presets `-i Engine.ini`, `-i EngineVegas.ini`, `-i Engine4V4.ini`, `-i EngineNetworked.ini` however nearly all builds use Engine.ini
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
