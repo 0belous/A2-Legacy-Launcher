@@ -7,6 +7,7 @@ import requests
 import zipfile
 import platform
 import re
+import mmap
 import xml.etree.ElementTree as ET
 from importlib import resources
 import json
@@ -380,6 +381,12 @@ def process_apk(apk_path, args):
         if so_path:
             inject_so(DECOMPILED_DIR, so_path)
 
+    if args.patch:
+        if not args.obb:
+            print_error("Cannot use --patch without an --obb file, as the version is needed to select the correct patch.", exit_code=None)
+            sys.exit(1)
+        patch_libunreal(get_path_from_input(args.obb, "obb"))
+
     print_info("Recompiling APK...")
     run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
     print_info("Aligning APK...")
@@ -513,14 +520,66 @@ def find_pattern(label, pattern, text, default_value="Not Found"):
         print(f"{label}: {default_value}")
         tip = True
 
+def patch_libunreal(obb_path):
+    so_file_path = os.path.join(DECOMPILED_DIR, "lib", "arm64-v8a", "libUnreal.so")
+    if not os.path.exists(so_file_path):
+        print_error(f"Could not find libUnreal.so at:\n{so_file_path}", exit_code=None)
+        return
+
+    version_patterns = {
+        '65824486': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47702
+        '65425880': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47514
+        '65291532': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47251
+        '65134129': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47133
+        '65065687': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47057
+        '64955222': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47031
+        '64880848': b'\x9E\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.46986
+        '64081339': b'\xA0\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45885
+        '63387609': b'\xAC\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45185
+    }
+
+    obb_filename = os.path.basename(obb_path)
+    match = re.search(r'main\.(\d+)\.', obb_filename)
+    if not match:
+        print_error(f"Could not parse version code from OBB filename: '{obb_filename}'. Expected format: main.VERSION.package.obb", exit_code=None)
+        return
+    version_code = match.group(1)
+    print_info(f"Detected OBB version code: {version_code}")
+    original_pattern = version_patterns.get(version_code)
+    if not original_pattern:
+        print_error(f"No pattern found for: '{version_code}'. Please remove the --patch argument.", exit_code=None)
+        return
+    print_info(f"Patching {os.path.basename(so_file_path)} for version {version_code}...")
+    patched_bytes = b'\x1F\x20\x03\xD5'
+    patched_pattern = patched_bytes + original_pattern[len(patched_bytes):]
+    try:
+        with open(so_file_path, 'r+b') as f:
+            with mmap.mmap(f.fileno(), 0) as mm:
+                if mm.find(patched_pattern) != -1:
+                    print_info("File already patched.")
+                    return
+
+                offset = mm.find(original_pattern)
+                if offset != -1:
+                    print_info(f"Found offset: {hex(offset)}. Patching...")
+                    mm.seek(offset)
+                    mm.write(patched_bytes)
+                    mm.flush()
+                    print_success("File successfully patched.")
+                else:
+                    print_error("Pattern not found.", exit_code=None)
+    except Exception as e:
+        print_error(f"An unexpected error occurred during patching: {e}")
+
 def main():
-    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path/URL to the source APK file")
-    parser.add_argument("-o", "--obb", help="Path/URL to the OBB file")
-    parser.add_argument("-i", "--ini", help="Path/URL to an Engine.ini")
+    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
+    parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
+    parser.add_argument("-i", "--ini", help="Path/URL/Preset to an Engine.ini\nPreset options: Engine.ini EngineVegas.ini Engine4v4.ini EngineNetworked.ini")
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package to allow multiple installs")
+    parser.add_argument("-p", "--patch", action="store_true", help="Remove entitlement check from libUnreal.so")
     parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
     parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
