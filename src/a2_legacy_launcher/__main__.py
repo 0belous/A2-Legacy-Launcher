@@ -140,7 +140,7 @@ def clean_temp_dir():
     os.makedirs(TEMP_DIR)
 
 def download_with_progress(url, filename):
-    print_info(f"Downloading {filename} from {url}...")
+    print_info(f"Downloading {os.path.basename(filename)} from {url}...")
     try:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         with requests.get(url, stream=True, verify=False) as r:
@@ -457,31 +457,35 @@ def get_path_from_input(input_str, file_type):
         url = input_str
         cache_index = get_cache_index()
         filename = None
-        parsed_url = urlparse(url)
-        query_params = parse_qs(parsed_url.query)
-        path_from_query = query_params.get('path', [None])[0]
-        if path_from_query:
-            potential_filename = os.path.basename(unquote(path_from_query))
-            if '.' in potential_filename:
-                filename = potential_filename
-        if not filename:
-            path_segment = unquote(parsed_url.path)
-            potential_filename = os.path.basename(path_segment)
-            if '.' in potential_filename:
-                filename = potential_filename
-        if not filename:
-            if file_type == 'obb':
-                print_error("Could not determine a valid OBB filename from the URL. Please use a direct link to the .obb file.")
-                return None
-            else:
+        if file_type == 'apk':
+            url_hash = hashlib.sha256(url.encode()).hexdigest()
+            filename = f"{url_hash}.apk"
+        else:
+            try:
+                parsed_url = urlparse(url)
+                query_params = parse_qs(parsed_url.query)
+                path_from_query = query_params.get('path', [None])[0]
+                if path_from_query:
+                    potential_filename = os.path.basename(unquote(path_from_query))
+                    if '.' in potential_filename:
+                        filename = potential_filename
+                if not filename:
+                    path_segment = unquote(parsed_url.path)
+                    potential_filename = os.path.basename(path_segment)
+                    if '.' in potential_filename:
+                        filename = potential_filename
+            except Exception as e:
+                 print_info(f"Could not parse filename from URL, falling back to hash. Error: {e}")
+            if not filename:
                 url_hash = hashlib.sha256(url.encode()).hexdigest()
                 filename = f"{url_hash}.{file_type}"
         cached_file_path = os.path.join(CACHE_DIR, filename)
-        if url in cache_index and os.path.exists(cached_file_path):
-            print_info(f"Using cached {file_type}: {cached_file_path}")
-            return cached_file_path
+        if url in cache_index and os.path.exists(cache_index.get(url, {}).get("path")):
+            cached_path = cache_index[url]['path']
+            print_info(f"Using cached {file_type}: {cached_path}")
+            return cached_path
         if download_with_progress(url, cached_file_path):
-            cache_index[url] = { "path": cached_file_path }
+            cache_index[url] = {"path": cached_file_path}
             update_cache_index(cache_index)
             print_success(f"Successfully downloaded {file_type}.")
             return cached_file_path
