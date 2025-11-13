@@ -14,6 +14,7 @@ import json
 import hashlib
 from urllib.parse import urlparse, unquote, parse_qs
 import urllib3
+from pySmartDL import SmartDL
 from colorama import Fore
 from colorama import init
 init(autoreset=True)
@@ -139,21 +140,19 @@ def clean_temp_dir():
         shutil.rmtree(TEMP_DIR)
     os.makedirs(TEMP_DIR)
 
-def download_with_progress(url, filename):
+def download(url, filename):
     print_info(f"Downloading {os.path.basename(filename)} from {url}...")
     try:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        with requests.get(url, stream=True, verify=False) as r:
-            r.raise_for_status()
-            total_size = int(r.headers.get('content-length', 0))
-            with open(filename, 'wb') as f:
-                chunk_size = 8192
-                for chunk in r.iter_content(chunk_size=chunk_size):
-                    f.write(chunk)
-                    print(f"\rDownloading... {f.tell() / (1024*1024):.2f} MB of {total_size / (1024*1024):.2f} MB", end="")
-        print("\nDownload complete.")
-        return True
-    except requests.exceptions.RequestException as e:
+        obj = SmartDL(url, dest=filename, progress_bar=True)
+        obj.start()
+        if obj.isSuccessful():
+            print("\nDownload complete.")
+            return True
+        else:
+            print_error(f"Failed to download file: {obj.get_errors()}")
+            return False
+
+    except Exception as e:
         print_error(f"Failed to download file: {e}")
         return False
 
@@ -165,7 +164,7 @@ def check_and_install_java():
     if is_windows:
         url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.msi"
         installer_path = os.path.join(APP_DATA_DIR, "OpenJDK.msi")
-        if not download_with_progress(url, installer_path):
+        if not download(url, installer_path):
             print_error("Failed to download Java installer. Please install it manually.")
             return
         print_info("Running the Java installer... Please accept the UAC prompt and follow the installation steps.")
@@ -181,7 +180,7 @@ def check_and_install_java():
 
 def setup_sdk():
     print_info("Android SDK not found. Starting automatic setup...")
-    if not download_with_progress(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
+    if not download(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
         return
     print_info(f"Extracting {CMD_TOOLS_ZIP}...")
     if os.path.exists(SDK_ROOT):
@@ -484,7 +483,7 @@ def get_path_from_input(input_str, file_type):
             cached_path = cache_index[url]['path']
             print_info(f"Using cached {file_type}: {cached_path}")
             return cached_path
-        if download_with_progress(url, cached_file_path):
+        if download(url, cached_file_path):
             cache_index[url] = {"path": cached_file_path}
             update_cache_index(cache_index)
             print_success(f"Successfully downloaded {file_type}.")

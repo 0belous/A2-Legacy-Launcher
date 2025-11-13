@@ -14,7 +14,8 @@ authors = [
 ]
 dependencies = [
     "requests",
-    "colorama"
+    "colorama",
+    "pySmartDL"
 ]
 
 [project.scripts]
