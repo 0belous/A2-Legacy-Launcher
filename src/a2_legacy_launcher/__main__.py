@@ -406,9 +406,7 @@ def install_modded_apk(device_id, package_name):
 def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
     if is_renamed:
         new_obb_name = os.path.basename(obb_file).replace(PACKAGE_NAME, effective_package_name)
-        temp_obb_path = os.path.join(TEMP_DIR, new_obb_name)
-        shutil.copy(obb_file, temp_obb_path)
-        obb_to_upload = temp_obb_path
+        obb_to_upload = obb_file
         final_obb_name = new_obb_name
     else:
         obb_to_upload = obb_file
