@@ -67,7 +67,7 @@ COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
 CACHE_INDEX = os.path.join(CACHE_DIR, "cache_index.json")
-PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini"]
+PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini", "EnginePlayerstart.ini"]
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -528,6 +528,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '66591868': b'\x40\x0A\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48110
         '65824486': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47702
         '65425880': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47514
         '65291532': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47251
