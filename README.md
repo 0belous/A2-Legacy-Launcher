@@ -31,14 +31,9 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Run the script
+5. Provide a CL, Version number or Version code to install
 
-   `a2ll`
-
-6. If you are prompted to install java follow the instructions and restart your command prompt after.
-
-7. Provide an APK and OBB to install
-
+   `a2ll 5491`
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 </details>
 
@@ -112,17 +107,13 @@ options:
 
    > --ini is unique because it can be ran on its own without rebuilding or reinstalling to almost instantly swap out an ini file
 
-#### Example commands:
+## Comaptibility:
 
-1.0.47031:
-```
-a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk -o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb -i Engine.ini -c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay" -sp -op
-```
+**ALL** Known versions can be made to run
 
-1.0.4383:
-```
-a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.4383/A2%2B1.0.4383-5.1.1-main.apk -i EngineVegas.ini -c="--useinsecure" -rn -sp -op
-```
+However: Versions **11235 - 23189** cannot be renamed
+
+And versions that released within the last week may not have patterns available
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>

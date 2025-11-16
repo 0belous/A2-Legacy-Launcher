@@ -667,22 +667,22 @@ def patch_libunreal(obb_path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="A2 Legacy Launcher by Obelous " + __version__,
+        description="A2 Legacy Launcher "+__version__+" by Obelous ",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="Example usage:\n  a2ll 5491 --rename\n  a2ll --apk /path/to/my.apk --obb /path/to/my.obb"
     )
-    parser.add_argument('download', nargs='?', default=None, help="Build version to download and install (e.g., 5491).")
+    parser.add_argument('download', nargs='?', default=None, help="Build version to download and install -")
     parser.add_argument("-v", "--version", action="version", version=f"Legacy Launcher {__version__}")
     parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
     parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
-    parser.add_argument("-i", "--ini", help="Path/URL/Preset to an Engine.ini\nPreset options: Engine.ini EngineVegas.ini Engine4v4.ini EngineNetworked.ini")
+    parser.add_argument("-i", "--ini", help="Path/URL/Preset for Engine.ini\nPresets: " + ", ".join(PRESET_INI_FILES))
     parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package to allow multiple installs")
+    parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package for parallel installs")
     parser.add_argument("-p", "--patch", action="store_true", help="Remove entitlement check from libUnreal.so")
-    parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
+    parser.add_argument("-rm", "--remove", action="store_true", help="Uninstall all versions")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
-    parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
+    parser.add_argument("-ls", "--list", action="store_true", help="List available versions")
+    parser.add_argument("-op", "--open", action="store_true", help="Launch the game once finished")
     parser.add_argument("-sp", "--strip", action="store_true", help="Strip permissions to skip pompts on first launch")
     parser.add_argument("-sk", "--skipdecompile", action="store_true", help="Reuse previously decompiled files")
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
@@ -690,9 +690,17 @@ def main():
     print(Fore.LIGHTYELLOW_EX + BANNER)
     check_for_updates()
     
+    if args.clearcache:
+        action_performed = True
+        if os.path.exists(CACHE_DIR):
+            shutil.rmtree(CACHE_DIR)
+        if os.path.exists(TEMP_DIR):
+            shutil.rmtree(TEMP_DIR)
+        print_success("Cache and temporary files cleared.")
+        sys.exit(0)
+
     if args.download and args.apk:
         print_error("Cannot specify a version to download and an APK file at the same time.", exit_code=1)
-
     config = load_config()
     if args.download:
         manifest_url = config.get('manifest_url')
@@ -711,13 +719,12 @@ def main():
             print_error(f"Version '{args.download}' not found in the manifest.")
         
         global NEW_PACKAGE_NAME
-        NEW_PACKAGE_NAME = f"com.LegacyLauncherV{version_data['version_number']}.A2"
+        NEW_PACKAGE_NAME = f"com.LegacyLauncher.V{version_data['version_number']}"
         
         print_success(f"Installing version: {version_data['version']}")
         flags_str = version_data.get('flags', '')
         print_info(f"Using flags: {flags_str}")
         manifest_args = parser.parse_args(shlex.split(flags_str))
-
         if args.ini is None:
             args.ini = manifest_args.ini
         if args.commandline is None:
@@ -732,6 +739,30 @@ def main():
         args.apk = version_data.get('apk_url')
         args.obb = version_data.get('obb_url')
 
+    if args.list:
+        manifest_url = config.get('manifest_url')
+        if not manifest_url:
+            print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
+        manifest_path = get_path_from_input(manifest_url, "json")
+        if not manifest_path:
+            print_error("Failed to download manifest.", exit_code=1)
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except Exception as e:
+            print_error(f"Failed to read or parse manifest file: {e}")
+        
+        versions = manifest.get('versions', [])
+        if not versions:
+            print_info("No versions found in manifest.")
+        else:
+            print_info("Available versions:")
+            for version_data in versions:
+                version_str = version_data.get('version', 'N/A')
+                version_code = version_data.get('version_code', 'N/A')
+                print(f"  - Version: {version_str} ({version_code})")
+        sys.exit(0)
+
     check_and_install_java()
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
@@ -744,12 +775,32 @@ def main():
     action_performed = False
     if args.remove:
         action_performed = True
-        print_info(f"Attempting to uninstall {effective_package_name}...")
-        target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
-        shell_command = f"run-as {effective_package_name} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
-        subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-        run_command([ADB_PATH, "-s", device_id, "uninstall", effective_package_name])
-        print_success(f"{effective_package_name} has been uninstalled.")
+        print_info("Scanning for all installed versions to remove...")
+        packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"])
+        packages_to_remove = [PACKAGE_NAME]
+        for line in packages_output.splitlines():
+            package = line.replace("package:", "").strip()
+            if package.startswith("com.LegacyLauncher."):
+                packages_to_remove.append(package)
+        
+        uninstalled_count = 0
+        for package in set(packages_to_remove):
+            print_info(f"Attempting to uninstall {package}...")
+            target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
+            shell_command = f"run-as {package} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
+            subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
+            
+            uninstall_result = subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package], capture_output=True, text=True)
+            if "Success" in uninstall_result.stdout:
+                print_success(f"{package} has been uninstalled.")
+                uninstalled_count += 1
+            elif "not installed for user" not in uninstall_result.stderr:
+                 print_info(f"{package} was not installed.")
+
+        if uninstalled_count > 0:
+            print_success(f"Uninstalled {uninstalled_count} package(s).")
+        else:
+            print_info("No relevant packages found to uninstall.")
         sys.exit(0)
     try:
         if args.logs:
@@ -796,14 +847,6 @@ def main():
         print_info("Error: A2.log not found.")
     except Exception as e:
         print_info(f"An unexpected error occurred: {e}")
-    if args.clearcache:
-        action_performed = True
-        if os.path.exists(CACHE_DIR):
-            shutil.rmtree(CACHE_DIR)
-        if os.path.exists(TEMP_DIR):
-            shutil.rmtree(TEMP_DIR)
-        print_success("Cache and temporary files cleared.")
-        sys.exit(0)
     if args.apk:
         action_performed = True
         apk_path = get_path_from_input(args.apk, "apk")
