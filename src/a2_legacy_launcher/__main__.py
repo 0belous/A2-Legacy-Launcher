@@ -19,6 +19,8 @@ from colorama import Fore
 from colorama import init
 init(autoreset=True)
 
+__version__ = "1.0.23"
+
 try:
     from importlib.resources import files
     KEYSTORE_FILE_REF = files('a2_legacy_launcher').joinpath('dev.keystore')
@@ -574,7 +576,8 @@ def patch_libunreal(obb_path):
         print_error(f"An unexpected error occurred during patching: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous "+__version__, formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
     parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
     parser.add_argument("-i", "--ini", help="Path/URL/Preset to an Engine.ini\nPreset options: Engine.ini EngineVegas.ini Engine4v4.ini EngineNetworked.ini")

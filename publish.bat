@@ -1,4 +1,2 @@
 @echo off
-rmdir /s /q dist
-python -m build
-twine upload dist/*
+REM This file is no longer used. Publishing is handled by the GitHub Actions workflow.

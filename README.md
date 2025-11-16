@@ -111,21 +111,25 @@ options:
 
 - `--rename` This renames the package to com.LegacyLauncher.A2 to allow for multiple versions to be installed at once, but it must be used in conjunction with `-c="-useinsecure"` on a version where this argument exists.
 
+   > If a renamed version is installed the `--log` argument can be used with `--rename` to pull the logs of the renamed app.
+
 - `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
 
 - `--ini` Supports local path, url and these presets `-i Engine.ini`, `-i EngineVegas.ini`, `-i Engine4V4.ini`, `-i EngineNetworked.ini` however nearly all builds use Engine.ini
 
-#### Example command:
+   > --ini is unique because it can be ran on its own without rebuilding or reinstalling to almost instantly swap out an ini file
 
-`a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk -o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb -i Engine.ini -c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay" -sp -op`
+#### Example commands:
 
-Breakdown:
-- `-a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk` - Download 1.0.47031 APK
-- `-o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb` - Download 1.0.47031 OBB
-- `-i Engine.ini` - Use Engine.ini
-- `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay"` - Load replay of AA_Trick completing the first parkour
-- `-sp` - Strip permissions
-- `-op` - Open once finished
+1.0.47031:
+```
+a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk -o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb -i Engine.ini -c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay" -sp -op
+```
+
+1.0.4383:
+```
+a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.4383/A2%2B1.0.4383-5.1.1-main.apk -i EngineVegas.ini -c="--useinsecure" -rn -sp -op
+```
 
 ## How does it work?
 Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>

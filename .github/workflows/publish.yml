@@ -8,6 +8,8 @@ on:
 jobs:
   build-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -29,7 +31,10 @@ jobs:
           git config --global user.email "github-actions@github.com"
 
       - name: Bump patch version
-        run: bump-my-version bump patch --allow-dirty
+        run: bump-my-version bump patch
+
+      - name: Push changes
+        run: git push --follow-tags
 
       - name: Clean previous builds
         run: rm -rf dist build *.egg-info
