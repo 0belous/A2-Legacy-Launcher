@@ -65,24 +65,17 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Run the script
+5. Provide a CL, Version number or Version code to install
 
-   `a2ll`
-
-6. Provide an APK and OBB to install
-
+   `a2ll 5491`
     All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
 
 </details>
 
-To update run:
-
-`pipx upgrade a2-legacy-launcher`
-
 ## Usage
 
 ```
-a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
+a2ll [-h] [--version] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
 
 A2 Legacy Launcher
 

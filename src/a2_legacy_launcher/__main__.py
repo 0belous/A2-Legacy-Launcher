@@ -17,9 +17,13 @@ import urllib3
 from pySmartDL import SmartDL
 from colorama import Fore
 from colorama import init
+import shlex
+import yaml
+import time
+
 init(autoreset=True)
 
-__version__ = "1.0.23"
+__version__ = "1.1.0"
 
 try:
     from importlib.resources import files
@@ -48,6 +52,7 @@ APP_DATA_DIR = get_app_data_dir()
 SDK_ROOT = os.path.join(APP_DATA_DIR, "android-sdk")
 TEMP_DIR = os.path.join(APP_DATA_DIR, "tmp")
 CACHE_DIR = os.path.join(APP_DATA_DIR, "cache")
+CONFIG_FILE = os.path.join(APP_DATA_DIR, "config.yml")
 
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
@@ -86,6 +91,78 @@ BANNER = r"""
   / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ <
  /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
 """
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        print_info(f"Creating default configuration at {CONFIG_FILE}")
+        default_config = {
+            'manifest_url': 'https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json'
+        }
+        with open(CONFIG_FILE, 'w') as f:
+            yaml.dump(default_config, f)
+        return default_config
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print_error(f"Failed to load or parse {CONFIG_FILE}: {e}")
+
+def find_version_in_manifest(manifest, identifier):
+    identifier_str = str(identifier).strip()
+    try:
+        identifier_int = int(identifier_str)
+    except ValueError:
+        identifier_int = None
+
+    for version_data in manifest.get('versions', []):
+        if identifier_int is not None and version_data.get('version_number') == identifier_int:
+            return version_data
+        if identifier_int is not None and version_data.get('version_code') == identifier_int:
+            return version_data
+        if version_data.get('version') == identifier_str:
+            return version_data
+        if version_data.get('version') == f"1.0.{identifier_str}":
+            return version_data
+            
+    return None
+
+def apply_manifest_flags(args, flags_str):
+    if not flags_str:
+        return
+    parsed_flags = shlex.split(flags_str)
+    i = 0
+    while i < len(parsed_flags):
+        flag = parsed_flags[i]
+        if flag == "--patch":
+            args.patch = True
+        elif flag == "--rename":
+            args.rename = True
+        elif flag == "--strip":
+            args.strip = True
+        elif flag in ("-i", "--ini"):
+            if args.ini is None and i + 1 < len(parsed_flags):
+                args.ini = parsed_flags[i+1]
+                i += 1
+        elif flag == "--commandline":
+            if args.commandline is None and i + 1 < len(parsed_flags):
+                args.commandline = parsed_flags[i+1]
+                i += 1
+        i += 1
+
+def check_for_updates():
+    try:
+        from packaging.version import parse as parse_version
+        pypi_url = "https://pypi.org/pypi/a2-legacy-launcher/json"
+        response = requests.get(pypi_url, timeout=3)
+        response.raise_for_status()
+        latest_version_str = response.json()["info"]["version"]
+        current_version = parse_version(__version__)
+        latest_version = parse_version(latest_version_str)
+        if latest_version > current_version:
+            print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version}) is available!")
+            print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher\n")
+    except Exception:
+        pass
 
 def print_info(message):
     print(f"[INFO] {message}")
@@ -160,7 +237,6 @@ def download(url, filename):
 
 def check_and_install_java():
     if shutil.which("java"):
-        print_success("Java detected")
         return
     print_error("Java not found. The Java Runtime Environment (JRE) is required.", exit_code=None)
     if is_windows:
@@ -292,7 +368,6 @@ def rename_package(decompiled_dir, old_pkg, new_pkg):
                     os.removedirs(os.path.dirname(old_path))
                 except OSError:
                     pass
-    print_success("Package renaming complete.")
 
 def inject_so(decompiled_dir, so_filename):
     print_info(f"Injecting {so_filename}...")
@@ -384,7 +459,7 @@ def process_apk(apk_path, args):
 
     if args.patch:
         if not args.obb:
-            print_error("Cannot use --patch without an --obb file, as the version is needed to select the correct patch.", exit_code=None)
+            print_error("Cannot use --patch without an --obb file.", exit_code=None)
             sys.exit(1)
         patch_libunreal(get_path_from_input(args.obb, "obb"))
 
@@ -480,11 +555,27 @@ def get_path_from_input(input_str, file_type):
                 filename = f"{url_hash}.{file_type}"
         cached_file_path = os.path.join(CACHE_DIR, filename)
         if url in cache_index and os.path.exists(cache_index.get(url, {}).get("path")):
-            cached_path = cache_index[url]['path']
-            print_info(f"Using cached {file_type}: {cached_path}")
-            return cached_path
+            is_expired = False
+            if file_type == 'json':
+                cached_time = cache_index[url].get('timestamp', 0)
+                if (time.time() - cached_time) > 86400:
+                    print_info("Updating manifest...")
+                    is_expired = True
+                    try:
+                        os.remove(cache_index[url]['path'])
+                    except OSError:
+                        pass
+                    del cache_index[url]
+                    update_cache_index(cache_index)
+            if not is_expired:
+                cached_path = cache_index[url]['path']
+                print_info(f"Using cached {file_type}: {cached_path}")
+                return cached_path
         if download(url, cached_file_path):
-            cache_index[url] = {"path": cached_file_path}
+            cache_entry = {"path": cached_file_path}
+            if file_type == 'json':
+                cache_entry['timestamp'] = time.time()
+            cache_index[url] = cache_entry
             update_cache_index(cache_index)
             print_success(f"Successfully downloaded {file_type}.")
             return cached_file_path
@@ -548,12 +639,11 @@ def patch_libunreal(obb_path):
         print_error(f"Could not parse version code from OBB filename: '{obb_filename}'. Expected format: main.VERSION.package.obb", exit_code=None)
         return
     version_code = match.group(1)
-    print_info(f"Detected OBB version code: {version_code}")
     original_pattern = version_patterns.get(version_code)
     if not original_pattern:
         print_error(f"No pattern found for: '{version_code}'. Please remove the --patch argument.", exit_code=None)
         return
-    print_info(f"Patching {os.path.basename(so_file_path)} for version {version_code}...")
+    print_info(f"Patching version {version_code}...")
     patched_bytes = b'\x1F\x20\x03\xD5'
     patched_pattern = patched_bytes + original_pattern[len(patched_bytes):]
     try:
@@ -576,8 +666,13 @@ def patch_libunreal(obb_path):
         print_error(f"An unexpected error occurred during patching: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous "+__version__, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
+    parser = argparse.ArgumentParser(
+        description="A2 Legacy Launcher by Obelous " + __version__,
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Example usage:\n  a2ll 5491 --rename\n  a2ll --apk /path/to/my.apk --obb /path/to/my.obb"
+    )
+    parser.add_argument('download', nargs='?', default=None, help="Build version to download and install (e.g., 5491).")
+    parser.add_argument("-v", "--version", action="version", version=f"Legacy Launcher {__version__}")
     parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
     parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
     parser.add_argument("-i", "--ini", help="Path/URL/Preset to an Engine.ini\nPreset options: Engine.ini EngineVegas.ini Engine4v4.ini EngineNetworked.ini")
@@ -593,11 +688,53 @@ def main():
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
     print(Fore.LIGHTYELLOW_EX + BANNER)
+    check_for_updates()
+    
+    if args.download and args.apk:
+        print_error("Cannot specify a version to download and an APK file at the same time.", exit_code=1)
+
+    config = load_config()
+    if args.download:
+        manifest_url = config.get('manifest_url')
+        if not manifest_url:
+            print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
+        manifest_path = get_path_from_input(manifest_url, "json")
+        if not manifest_path:
+            print_error("Failed to download manifest.", exit_code=1)
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except Exception as e:
+            print_error(f"Failed to read or parse manifest file: {e}")
+        version_data = find_version_in_manifest(manifest, args.download)
+        if not version_data:
+            print_error(f"Version '{args.download}' not found in the manifest.")
+        
+        global NEW_PACKAGE_NAME
+        NEW_PACKAGE_NAME = f"com.LegacyLauncherV{version_data['version_number']}.A2"
+        
+        print_success(f"Installing version: {version_data['version']}")
+        flags_str = version_data.get('flags', '')
+        print_info(f"Using flags: {flags_str}")
+        manifest_args = parser.parse_args(shlex.split(flags_str))
+
+        if args.ini is None:
+            args.ini = manifest_args.ini
+        if args.commandline is None:
+            args.commandline = manifest_args.commandline
+        if not args.patch:
+            args.patch = manifest_args.patch
+        if not args.rename:
+            args.rename = manifest_args.rename
+        if not args.strip:
+            args.strip = manifest_args.strip
+
+        args.apk = version_data.get('apk_url')
+        args.obb = version_data.get('obb_url')
+
     check_and_install_java()
     if not os.path.exists(SDK_MANAGER_PATH):
         setup_sdk()
-    else:
-        print_success("Android SDK found")
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):
