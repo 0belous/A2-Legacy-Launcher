@@ -24,15 +24,18 @@ import time
 init(autoreset=True)
 
 __version__ = "1.1.0"
+IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
     from importlib.resources import files
+    jar_name = 'apktool-2.12.1-termux.jar' if IS_TERMUX else 'apktool_2.12.0.jar'
     KEYSTORE_FILE_REF = files('a2_legacy_launcher').joinpath('dev.keystore')
-    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath('apktool_2.12.0.jar')
+    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath(jar_name)
 except ImportError:
     from importlib.resources import path as resource_path
+    jar_name = 'apktool-2.12.1-termux.jar' if IS_TERMUX else 'apktool_2.12.0.jar'
     KEYSTORE_FILE_REF = resource_path('a2_legacy_launcher', 'dev.keystore')
-    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', 'apktool_2.12.0.jar')
+    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', jar_name)
 
 with resources.as_file(KEYSTORE_FILE_REF) as keystore_path:
     KEYSTORE_FILE = str(keystore_path)
@@ -63,11 +66,18 @@ is_windows = os.name == "nt"
 exe_ext = ".exe" if is_windows else ""
 script_ext = ".bat" if is_windows else ""
 
-ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
-SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "latest", "bin", f"sdkmanager{script_ext}")
-BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
-ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
-APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
+if IS_TERMUX:
+    ADB_PATH = "adb"
+    ZIPALIGN_PATH = "zipalign"
+    APKSIGNER_PATH = "apksigner"
+    SDK_MANAGER_PATH = ""
+    BUILD_TOOLS_PATH = ""
+else:
+    ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
+    SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "latest", "bin", f"sdkmanager{script_ext}")
+    BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
+    ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
+    APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
 
 DECOMPILED_DIR = os.path.join(TEMP_DIR, "decompiled")
 COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
@@ -257,6 +267,8 @@ def check_and_install_java():
         sys.exit(1)
 
 def setup_sdk():
+    if IS_TERMUX:
+        return
     print_info("Android SDK not found. Starting automatic setup...")
     if not download(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
         return
@@ -445,9 +457,7 @@ def process_apk(apk_path, args):
         modify_manifest(DECOMPILED_DIR)
 
     if args.commandline:
-        user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
-        appdata_base = os.path.expanduser("~")
-        ue_cmdline_path = os.path.join(appdata_base, ".a2-legacy-launcher", "tmp", "decompiled", "assets", "UECommandLine.txt")
+        ue_cmdline_path = os.path.join(DECOMPILED_DIR, "assets", "UECommandLine.txt")
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
@@ -460,11 +470,15 @@ def process_apk(apk_path, args):
     if args.patch:
         if not args.obb:
             print_error("Cannot use --patch without an --obb file.", exit_code=None)
-            sys.exit(1)
         patch_libunreal(get_path_from_input(args.obb, "obb"))
 
     print_info("Recompiling APK...")
-    run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
+    recompile_cmd = ["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK]
+    if IS_TERMUX:
+        recompile_cmd.insert(4, "--aapt")
+        recompile_cmd.insert(5, str(files('a2_legacy_launcher').joinpath("aapt2-ARM64")))
+    run_command(recompile_cmd)
+
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
     print_info("Signing APK...")
@@ -483,16 +497,14 @@ def install_modded_apk(device_id, package_name):
 def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
     if is_renamed:
         new_obb_name = os.path.basename(obb_file).replace(PACKAGE_NAME, effective_package_name)
-        obb_to_upload = obb_file
         final_obb_name = new_obb_name
     else:
-        obb_to_upload = obb_file
         final_obb_name = os.path.basename(obb_file)
     destination_dir = f"/sdcard/Android/obb/{effective_package_name}/"
     run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
     destination_path = os.path.join(destination_dir, final_obb_name).replace('\\', '/')
     print_info(f"Uploading OBB...")
-    run_command([ADB_PATH, "-s", device_id, "push", obb_to_upload, destination_path])
+    run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
     print_success("OBB upload complete.")
 
 def push_ini(device_id, ini_file, package_name):
@@ -675,7 +687,7 @@ def main():
     parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
     parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
     parser.add_argument("-i", "--ini", help="Path/URL/Preset for Engine.ini\nPresets: " + ", ".join(PRESET_INI_FILES))
-    parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
+    parser.add_argument("-c", "--commandline", help="Launch arguments for A2")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package for parallel installs")
     parser.add_argument("-p", "--patch", action="store_true", help="Remove entitlement check from libUnreal.so")
@@ -763,9 +775,11 @@ def main():
                 print(f"  - Version: {version_str} ({version_code})")
         sys.exit(0)
 
-    check_and_install_java()
-    if not os.path.exists(SDK_MANAGER_PATH):
-        setup_sdk()
+    if not IS_TERMUX:
+        check_and_install_java()
+        if not os.path.exists(SDK_MANAGER_PATH):
+            setup_sdk()
+
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):

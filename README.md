@@ -1,9 +1,6 @@
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher
 
-A script to manipulate Orion Drift APKs
-
-Particularly useful when running old versions of Orion Drift that don't have servers anymore.
+Run old versions of Orion Drift
 
 ## Dependencies
 - Python 3
@@ -31,10 +28,13 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Provide a CL, Version number or Version code to install
+5. Provide a CL, Build number or Version code to install
 
-   `a2ll 5491`
-    All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   Example: `a2ll 5491`
+
+   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   
+   Or by running `a2ll -ls`
 </details>
 
 <details>
@@ -60,32 +60,63 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Provide a CL, Version number or Version code to install
+5. Provide a CL, Build number or Version code to install
 
-   `a2ll 5491`
-    All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   Example: `a2ll 5491`
+
+   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   
+   Or by running `a2ll -ls`
+
+</details>
+
+<details>
+   <summary>Quest instructions</summary>
+   
+   <br>
+   
+   **Install:**
+
+1. Install termux
+
+   [Termux APK](https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3+github-debug_arm64-v8a.apk)
+
+2. (optional) Plug in a USB keyboard to make typing easier
+
+3. Run the helper script
+
+   ```
+   curl -L https://obelous.dev/a2ll.sh | bash
+   ```
 
 </details>
 
 ## Usage
 
 ```
-a2ll [-h] [--version] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
+usage: a2ll [-h] [-v] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [download]
 
-A2 Legacy Launcher
+A2 Legacy Launcher 1.1.0
+
+positional arguments:
+  download              Build version to download and install -
 
 options:
   -h, --help            show this help message and exit
-  -a APK, --apk APK     Path/URL to the source APK file
-  -o OBB, --obb OBB     Path/URL to the OBB file
-  -i INI, --ini INI     Path/URL to an Engine.ini
+  -v, --version         show program's version number and exit
+  -a APK, --apk APK     Path/URL to an APK file
+  -o OBB, --obb OBB     Path/URL to an OBB file
+  -i INI, --ini INI     Path/URL/Preset for Engine.ini
+                        Presets: Engine.ini, EngineVegas.ini, Engine4v4.ini, EngineNetworked.ini, EnginePlayerstart.ini
   -c COMMANDLINE, --commandline COMMANDLINE
-                        What commandline options to run A2 with
+                        Launch arguments for A2
   -so SO, --so SO       Inject a custom .so file
-  -rn, --rename         Rename the package to allow multiple installs
-  -rm, --remove         Use this if reinstalling doesnt bring you back to latest
+  -rn, --rename         Rename the package for parallel installs
+  -p, --patch           Remove entitlement check from libUnreal.so
+  -rm, --remove         Uninstall all versions
   -l, --logs            Pull game logs from the headset
-  -op, --open           Open the game once finished
+  -ls, --list           List available versions
+  -op, --open           Launch the game once finished
   -sp, --strip          Strip permissions to skip pompts on first launch
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
@@ -113,8 +144,4 @@ options:
 
 However: Versions **11235 - 23189** cannot be renamed
 
-And versions that released within the last week may not have patterns available
-
-## How does it work?
-Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
-From there we can place an Engine.ini which overrides the games file letting us load straight into the map without connecting to any servers.
+For newer versions renaming relies byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.
