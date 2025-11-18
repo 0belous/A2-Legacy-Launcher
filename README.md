@@ -77,13 +77,15 @@ Run old versions of Orion Drift
    
    **Install:**
 
-1. Install termux
+1. Connect to a computer or [android phone](https://sisik.eu/bugjaeger)
+
+   Run `adb tcpip 5555`
+
+3. Install termux
 
    [Termux APK](https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3+github-debug_arm64-v8a.apk)
 
-2. (optional) Plug in a USB keyboard to make typing easier
-
-3. Run the helper script
+4. Run the helper script in termux
 
    ```
    curl -L https://obelous.dev/a2ll.sh | bash
