@@ -6,24 +6,36 @@ import shutil
 import requests
 import zipfile
 import platform
+import re
+import mmap
 import xml.etree.ElementTree as ET
 from importlib import resources
 import json
 import hashlib
 from urllib.parse import urlparse, unquote, parse_qs
 import urllib3
+from pySmartDL import SmartDL
 from colorama import Fore
 from colorama import init
+import shlex
+import yaml
+import time
+
 init(autoreset=True)
+
+__version__ = "1.1.0"
+IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
     from importlib.resources import files
+    jar_name = 'apktool-2.12.1-termux.jar' if IS_TERMUX else 'apktool_2.12.0.jar'
     KEYSTORE_FILE_REF = files('a2_legacy_launcher').joinpath('dev.keystore')
-    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath('apktool_2.12.0.jar')
+    APKTOOL_JAR_REF = files('a2_legacy_launcher').joinpath(jar_name)
 except ImportError:
     from importlib.resources import path as resource_path
+    jar_name = 'apktool-2.12.1-termux.jar' if IS_TERMUX else 'apktool_2.12.0.jar'
     KEYSTORE_FILE_REF = resource_path('a2_legacy_launcher', 'dev.keystore')
-    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', 'apktool_2.12.0.jar')
+    APKTOOL_JAR_REF = resource_path('a2_legacy_launcher', jar_name)
 
 with resources.as_file(KEYSTORE_FILE_REF) as keystore_path:
     KEYSTORE_FILE = str(keystore_path)
@@ -43,6 +55,7 @@ APP_DATA_DIR = get_app_data_dir()
 SDK_ROOT = os.path.join(APP_DATA_DIR, "android-sdk")
 TEMP_DIR = os.path.join(APP_DATA_DIR, "tmp")
 CACHE_DIR = os.path.join(APP_DATA_DIR, "cache")
+CONFIG_FILE = os.path.join(APP_DATA_DIR, "config.yml")
 
 BUILD_TOOLS_VERSION = "34.0.0"
 PACKAGE_NAME = "com.AnotherAxiom.A2"
@@ -53,18 +66,25 @@ is_windows = os.name == "nt"
 exe_ext = ".exe" if is_windows else ""
 script_ext = ".bat" if is_windows else ""
 
-ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
-SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "latest", "bin", f"sdkmanager{script_ext}")
-BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
-ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
-APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
+if IS_TERMUX:
+    ADB_PATH = "adb"
+    ZIPALIGN_PATH = "zipalign"
+    APKSIGNER_PATH = "apksigner"
+    SDK_MANAGER_PATH = ""
+    BUILD_TOOLS_PATH = ""
+else:
+    ADB_PATH = os.path.join(SDK_ROOT, "platform-tools", f"adb{exe_ext}")
+    SDK_MANAGER_PATH = os.path.join(SDK_ROOT, "cmdline-tools", "latest", "bin", f"sdkmanager{script_ext}")
+    BUILD_TOOLS_PATH = os.path.join(SDK_ROOT, "build-tools", BUILD_TOOLS_VERSION)
+    ZIPALIGN_PATH = os.path.join(BUILD_TOOLS_PATH, f"zipalign{exe_ext}")
+    APKSIGNER_PATH = os.path.join(BUILD_TOOLS_PATH, f"apksigner{script_ext}")
 
 DECOMPILED_DIR = os.path.join(TEMP_DIR, "decompiled")
 COMPILED_APK = os.path.join(TEMP_DIR, "compiled.apk")
 ALIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.apk")
 SIGNED_APK = os.path.join(TEMP_DIR, "compiled.aligned.signed.apk")
 CACHE_INDEX = os.path.join(CACHE_DIR, "cache_index.json")
-PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini"]
+PRESET_INI_FILES = ["Engine.ini", "EngineVegas.ini", "Engine4v4.ini", "EngineNetworked.ini", "EnginePlayerstart.ini"]
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -81,6 +101,78 @@ BANNER = r"""
   / ___ \ / __/  | |___| |__| |_| |/ ___ \ |___  | |   | |___ / ___ \ |_| | |\  | |___|  _  | |___|  _ <
  /_/   \_\_____| |_____|_____\____/_/   \_\____| |_|   |_____/_/   \_\___/|_| \_|\____|_| |_|_____|_| \_\
 """
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        print_info(f"Creating default configuration at {CONFIG_FILE}")
+        default_config = {
+            'manifest_url': 'https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json'
+        }
+        with open(CONFIG_FILE, 'w') as f:
+            yaml.dump(default_config, f)
+        return default_config
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print_error(f"Failed to load or parse {CONFIG_FILE}: {e}")
+
+def find_version_in_manifest(manifest, identifier):
+    identifier_str = str(identifier).strip()
+    try:
+        identifier_int = int(identifier_str)
+    except ValueError:
+        identifier_int = None
+
+    for version_data in manifest.get('versions', []):
+        if identifier_int is not None and version_data.get('version_number') == identifier_int:
+            return version_data
+        if identifier_int is not None and version_data.get('version_code') == identifier_int:
+            return version_data
+        if version_data.get('version') == identifier_str:
+            return version_data
+        if version_data.get('version') == f"1.0.{identifier_str}":
+            return version_data
+            
+    return None
+
+def apply_manifest_flags(args, flags_str):
+    if not flags_str:
+        return
+    parsed_flags = shlex.split(flags_str)
+    i = 0
+    while i < len(parsed_flags):
+        flag = parsed_flags[i]
+        if flag == "--patch":
+            args.patch = True
+        elif flag == "--rename":
+            args.rename = True
+        elif flag == "--strip":
+            args.strip = True
+        elif flag in ("-i", "--ini"):
+            if args.ini is None and i + 1 < len(parsed_flags):
+                args.ini = parsed_flags[i+1]
+                i += 1
+        elif flag == "--commandline":
+            if args.commandline is None and i + 1 < len(parsed_flags):
+                args.commandline = parsed_flags[i+1]
+                i += 1
+        i += 1
+
+def check_for_updates():
+    try:
+        from packaging.version import parse as parse_version
+        pypi_url = "https://pypi.org/pypi/a2-legacy-launcher/json"
+        response = requests.get(pypi_url, timeout=3)
+        response.raise_for_status()
+        latest_version_str = response.json()["info"]["version"]
+        current_version = parse_version(__version__)
+        latest_version = parse_version(latest_version_str)
+        if latest_version > current_version:
+            print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version}) is available!")
+            print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher\n")
+    except Exception:
+        pass
 
 def print_info(message):
     print(f"[INFO] {message}")
@@ -137,33 +229,30 @@ def clean_temp_dir():
         shutil.rmtree(TEMP_DIR)
     os.makedirs(TEMP_DIR)
 
-def download_with_progress(url, filename):
-    print_info(f"Downloading {filename} from {url}...")
+def download(url, filename):
+    print_info(f"Downloading {os.path.basename(filename)} from {url}...")
     try:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        with requests.get(url, stream=True, verify=False) as r:
-            r.raise_for_status()
-            total_size = int(r.headers.get('content-length', 0))
-            with open(filename, 'wb') as f:
-                chunk_size = 8192
-                for chunk in r.iter_content(chunk_size=chunk_size):
-                    f.write(chunk)
-                    print(f"\rDownloading... {f.tell() / (1024*1024):.2f} MB of {total_size / (1024*1024):.2f} MB", end="")
-        print("\nDownload complete.")
-        return True
-    except requests.exceptions.RequestException as e:
+        obj = SmartDL(url, dest=filename, progress_bar=True)
+        obj.start()
+        if obj.isSuccessful():
+            print("\nDownload complete.")
+            return True
+        else:
+            print_error(f"Failed to download file: {obj.get_errors()}")
+            return False
+
+    except Exception as e:
         print_error(f"Failed to download file: {e}")
         return False
 
 def check_and_install_java():
     if shutil.which("java"):
-        print_success("Java detected")
         return
     print_error("Java not found. The Java Runtime Environment (JRE) is required.", exit_code=None)
     if is_windows:
         url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.msi"
         installer_path = os.path.join(APP_DATA_DIR, "OpenJDK.msi")
-        if not download_with_progress(url, installer_path):
+        if not download(url, installer_path):
             print_error("Failed to download Java installer. Please install it manually.")
             return
         print_info("Running the Java installer... Please accept the UAC prompt and follow the installation steps.")
@@ -178,8 +267,10 @@ def check_and_install_java():
         sys.exit(1)
 
 def setup_sdk():
+    if IS_TERMUX:
+        return
     print_info("Android SDK not found. Starting automatic setup...")
-    if not download_with_progress(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
+    if not download(CMD_TOOLS_URL, CMD_TOOLS_ZIP):
         return
     print_info(f"Extracting {CMD_TOOLS_ZIP}...")
     if os.path.exists(SDK_ROOT):
@@ -289,7 +380,6 @@ def rename_package(decompiled_dir, old_pkg, new_pkg):
                     os.removedirs(os.path.dirname(old_path))
                 except OSError:
                     pass
-    print_success("Package renaming complete.")
 
 def inject_so(decompiled_dir, so_filename):
     print_info(f"Injecting {so_filename}...")
@@ -367,9 +457,7 @@ def process_apk(apk_path, args):
         modify_manifest(DECOMPILED_DIR)
 
     if args.commandline:
-        user_profile = os.environ.get('USERNAME') or os.environ.get('USER')
-        appdata_base = os.path.expanduser("~")
-        ue_cmdline_path = os.path.join(appdata_base, ".a2-legacy-launcher", "tmp", "decompiled", "assets", "UECommandLine.txt")
+        ue_cmdline_path = os.path.join(DECOMPILED_DIR, "assets", "UECommandLine.txt")
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
@@ -379,8 +467,18 @@ def process_apk(apk_path, args):
         if so_path:
             inject_so(DECOMPILED_DIR, so_path)
 
+    if args.patch:
+        if not args.obb:
+            print_error("Cannot use --patch without an --obb file.", exit_code=None)
+        patch_libunreal(get_path_from_input(args.obb, "obb"))
+
     print_info("Recompiling APK...")
-    run_command(["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK])
+    recompile_cmd = ["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK]
+    if IS_TERMUX:
+        recompile_cmd.insert(4, "--aapt")
+        recompile_cmd.insert(5, str(files('a2_legacy_launcher').joinpath("aapt2-ARM64")))
+    run_command(recompile_cmd)
+
     print_info("Aligning APK...")
     run_command([ZIPALIGN_PATH, "-v", "4", COMPILED_APK, ALIGNED_APK], suppress_output=True)
     print_info("Signing APK...")
@@ -399,18 +497,14 @@ def install_modded_apk(device_id, package_name):
 def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
     if is_renamed:
         new_obb_name = os.path.basename(obb_file).replace(PACKAGE_NAME, effective_package_name)
-        temp_obb_path = os.path.join(TEMP_DIR, new_obb_name)
-        shutil.copy(obb_file, temp_obb_path)
-        obb_to_upload = temp_obb_path
         final_obb_name = new_obb_name
     else:
-        obb_to_upload = obb_file
         final_obb_name = os.path.basename(obb_file)
     destination_dir = f"/sdcard/Android/obb/{effective_package_name}/"
     run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
     destination_path = os.path.join(destination_dir, final_obb_name).replace('\\', '/')
     print_info(f"Uploading OBB...")
-    run_command([ADB_PATH, "-s", device_id, "push", obb_to_upload, destination_path])
+    run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
     print_success("OBB upload complete.")
 
 def push_ini(device_id, ini_file, package_name):
@@ -449,31 +543,51 @@ def get_path_from_input(input_str, file_type):
         url = input_str
         cache_index = get_cache_index()
         filename = None
-        parsed_url = urlparse(url)
-        query_params = parse_qs(parsed_url.query)
-        path_from_query = query_params.get('path', [None])[0]
-        if path_from_query:
-            potential_filename = os.path.basename(unquote(path_from_query))
-            if '.' in potential_filename:
-                filename = potential_filename
-        if not filename:
-            path_segment = unquote(parsed_url.path)
-            potential_filename = os.path.basename(path_segment)
-            if '.' in potential_filename:
-                filename = potential_filename
-        if not filename:
-            if file_type == 'obb':
-                print_error("Could not determine a valid OBB filename from the URL. Please use a direct link to the .obb file.")
-                return None
-            else:
+        if file_type == 'apk':
+            url_hash = hashlib.sha256(url.encode()).hexdigest()
+            filename = f"{url_hash}.apk"
+        else:
+            try:
+                parsed_url = urlparse(url)
+                query_params = parse_qs(parsed_url.query)
+                path_from_query = query_params.get('path', [None])[0]
+                if path_from_query:
+                    potential_filename = os.path.basename(unquote(path_from_query))
+                    if '.' in potential_filename:
+                        filename = potential_filename
+                if not filename:
+                    path_segment = unquote(parsed_url.path)
+                    potential_filename = os.path.basename(path_segment)
+                    if '.' in potential_filename:
+                        filename = potential_filename
+            except Exception as e:
+                 print_info(f"Could not parse filename from URL, falling back to hash. Error: {e}")
+            if not filename:
                 url_hash = hashlib.sha256(url.encode()).hexdigest()
                 filename = f"{url_hash}.{file_type}"
         cached_file_path = os.path.join(CACHE_DIR, filename)
-        if url in cache_index and os.path.exists(cached_file_path):
-            print_info(f"Using cached {file_type}: {cached_file_path}")
-            return cached_file_path
-        if download_with_progress(url, cached_file_path):
-            cache_index[url] = { "path": cached_file_path }
+        if url in cache_index and os.path.exists(cache_index.get(url, {}).get("path")):
+            is_expired = False
+            if file_type == 'json':
+                cached_time = cache_index[url].get('timestamp', 0)
+                if (time.time() - cached_time) > 86400:
+                    print_info("Updating manifest...")
+                    is_expired = True
+                    try:
+                        os.remove(cache_index[url]['path'])
+                    except OSError:
+                        pass
+                    del cache_index[url]
+                    update_cache_index(cache_index)
+            if not is_expired:
+                cached_path = cache_index[url]['path']
+                print_info(f"Using cached {file_type}: {cached_path}")
+                return cached_path
+        if download(url, cached_file_path):
+            cache_entry = {"path": cached_file_path}
+            if file_type == 'json':
+                cache_entry['timestamp'] = time.time()
+            cache_index[url] = cache_entry
             update_cache_index(cache_index)
             print_success(f"Successfully downloaded {file_type}.")
             return cached_file_path
@@ -504,27 +618,167 @@ def get_path_from_input(input_str, file_type):
     print_error(error_msg)
     return None
 
+def find_pattern(label, pattern, text, default_value="Not Found"):
+    match = re.search(pattern, text)
+    if match:
+        print(f"{label}: {match.group(1)}")
+    else:
+        print(f"{label}: {default_value}")
+
+def patch_libunreal(obb_path):
+    so_file_path = os.path.join(DECOMPILED_DIR, "lib", "arm64-v8a", "libUnreal.so")
+    if not os.path.exists(so_file_path):
+        print_error(f"Could not find libUnreal.so at:\n{so_file_path}", exit_code=None)
+        return
+
+    version_patterns = {
+        '66591868': b'\x40\x0A\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48110
+        '65824486': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47702
+        '65425880': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47514
+        '65291532': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47251
+        '65134129': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47133
+        '65065687': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47057
+        '64955222': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47031
+        '64880848': b'\x9E\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.46986
+        '64081339': b'\xA0\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45885
+        '63387609': b'\xAC\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45185
+    }
+
+    obb_filename = os.path.basename(obb_path)
+    match = re.search(r'main\.(\d+)\.', obb_filename)
+    if not match:
+        print_error(f"Could not parse version code from OBB filename: '{obb_filename}'. Expected format: main.VERSION.package.obb", exit_code=None)
+        return
+    version_code = match.group(1)
+    original_pattern = version_patterns.get(version_code)
+    if not original_pattern:
+        print_error(f"No pattern found for: '{version_code}'. Please remove the --patch argument.", exit_code=None)
+        return
+    print_info(f"Patching version {version_code}...")
+    patched_bytes = b'\x1F\x20\x03\xD5'
+    patched_pattern = patched_bytes + original_pattern[len(patched_bytes):]
+    try:
+        with open(so_file_path, 'r+b') as f:
+            with mmap.mmap(f.fileno(), 0) as mm:
+                if mm.find(patched_pattern) != -1:
+                    print_info("File already patched.")
+                    return
+
+                offset = mm.find(original_pattern)
+                if offset != -1:
+                    print_info(f"Found offset: {hex(offset)}. Patching...")
+                    mm.seek(offset)
+                    mm.write(patched_bytes)
+                    mm.flush()
+                    print_success("File successfully patched.")
+                else:
+                    print_error("Pattern not found.", exit_code=None)
+    except Exception as e:
+        print_error(f"An unexpected error occurred during patching: {e}")
+
 def main():
-    parser = argparse.ArgumentParser(description="A2 Legacy Launcher by Obelous", formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-a", "--apk", help="Path/URL to the source APK file")
-    parser.add_argument("-o", "--obb", help="Path/URL to the OBB file")
-    parser.add_argument("-i", "--ini", help="Path/URL to an Engine.ini")
-    parser.add_argument("-c", "--commandline", help="What commandline options to run A2 with")
+    parser = argparse.ArgumentParser(
+        description="A2 Legacy Launcher "+__version__+" by Obelous ",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument('download', nargs='?', default=None, help="Build version to download and install -")
+    parser.add_argument("-v", "--version", action="version", version=f"Legacy Launcher {__version__}")
+    parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
+    parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
+    parser.add_argument("-i", "--ini", help="Path/URL/Preset for Engine.ini\nPresets: " + ", ".join(PRESET_INI_FILES))
+    parser.add_argument("-c", "--commandline", help="Launch arguments for A2")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package to allow multiple installs")
-    parser.add_argument("-rm", "--remove", action="store_true", help="Use this if reinstalling doesnt bring you back to latest")
+    parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package for parallel installs")
+    parser.add_argument("-p", "--patch", action="store_true", help="Remove entitlement check from libUnreal.so")
+    parser.add_argument("-rm", "--remove", action="store_true", help="Uninstall all versions")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
-    parser.add_argument("-op", "--open", action="store_true", help="Open the game once finished")
+    parser.add_argument("-ls", "--list", action="store_true", help="List available versions")
+    parser.add_argument("-op", "--open", action="store_true", help="Launch the game once finished")
     parser.add_argument("-sp", "--strip", action="store_true", help="Strip permissions to skip pompts on first launch")
     parser.add_argument("-sk", "--skipdecompile", action="store_true", help="Reuse previously decompiled files")
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
     print(Fore.LIGHTYELLOW_EX + BANNER)
-    check_and_install_java()
-    if not os.path.exists(SDK_MANAGER_PATH):
-        setup_sdk()
-    else:
-        print_success("Android SDK found")
+    check_for_updates()
+    
+    if args.clearcache:
+        action_performed = True
+        if os.path.exists(CACHE_DIR):
+            shutil.rmtree(CACHE_DIR)
+        if os.path.exists(TEMP_DIR):
+            shutil.rmtree(TEMP_DIR)
+        print_success("Cache and temporary files cleared.")
+        sys.exit(0)
+
+    if args.download and args.apk:
+        print_error("Cannot specify a version to download and an APK file at the same time.", exit_code=1)
+    config = load_config()
+    if args.download:
+        manifest_url = config.get('manifest_url')
+        if not manifest_url:
+            print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
+        manifest_path = get_path_from_input(manifest_url, "json")
+        if not manifest_path:
+            print_error("Failed to download manifest.", exit_code=1)
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except Exception as e:
+            print_error(f"Failed to read or parse manifest file: {e}")
+        version_data = find_version_in_manifest(manifest, args.download)
+        if not version_data:
+            print_error(f"Version '{args.download}' not found in the manifest.")
+        
+        global NEW_PACKAGE_NAME
+        NEW_PACKAGE_NAME = f"com.LegacyLauncher.V{version_data['version_number']}"
+        
+        print_success(f"Installing version: {version_data['version']}")
+        flags_str = version_data.get('flags', '')
+        print_info(f"Using flags: {flags_str}")
+        manifest_args = parser.parse_args(shlex.split(flags_str))
+        if args.ini is None:
+            args.ini = manifest_args.ini
+        if args.commandline is None:
+            args.commandline = manifest_args.commandline
+        if not args.patch:
+            args.patch = manifest_args.patch
+        if not args.rename:
+            args.rename = manifest_args.rename
+        if not args.strip:
+            args.strip = manifest_args.strip
+
+        args.apk = version_data.get('apk_url')
+        args.obb = version_data.get('obb_url')
+
+    if args.list:
+        manifest_url = config.get('manifest_url')
+        if not manifest_url:
+            print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
+        manifest_path = get_path_from_input(manifest_url, "json")
+        if not manifest_path:
+            print_error("Failed to download manifest.", exit_code=1)
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except Exception as e:
+            print_error(f"Failed to read or parse manifest file: {e}")
+        
+        versions = manifest.get('versions', [])
+        if not versions:
+            print_info("No versions found in manifest.")
+        else:
+            print_info("Available versions:")
+            for version_data in versions:
+                version_str = version_data.get('version', 'N/A')
+                version_code = version_data.get('version_code', 'N/A')
+                print(f"  - Version: {version_str} ({version_code})")
+        sys.exit(0)
+
+    if not IS_TERMUX:
+        check_and_install_java()
+        if not os.path.exists(SDK_MANAGER_PATH):
+            setup_sdk()
+
     if not os.path.exists(APKTOOL_JAR):
         print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):
@@ -534,30 +788,120 @@ def main():
     action_performed = False
     if args.remove:
         action_performed = True
-        print_info(f"Attempting to uninstall {effective_package_name}...")
-        target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
-        shell_command = f"run-as {effective_package_name} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
-        subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-        run_command([ADB_PATH, "-s", device_id, "uninstall", effective_package_name])
-        print_success(f"{effective_package_name} has been uninstalled.")
+        print_info("Scanning for all installed versions to remove...")
+        packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"])
+        packages_to_remove = [PACKAGE_NAME]
+        for line in packages_output.splitlines():
+            package = line.replace("package:", "").strip()
+            if package.startswith("com.LegacyLauncher."):
+                packages_to_remove.append(package)
+        
+        uninstalled_count = 0
+        for package in set(packages_to_remove):
+            print_info(f"Attempting to uninstall {package}...")
+            target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
+            shell_command = f"run-as {package} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
+            subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
+            
+            uninstall_result = subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package], capture_output=True, text=True)
+            if "Success" in uninstall_result.stdout:
+                print_success(f"{package} has been uninstalled.")
+                uninstalled_count += 1
+            elif "not installed for user" not in uninstall_result.stderr:
+                 print_info(f"{package} was not installed.")
+
+        if uninstalled_count > 0:
+            print_success(f"Uninstalled {uninstalled_count} package(s).")
+        else:
+            print_info("No relevant packages found to uninstall.")
         sys.exit(0)
-    if args.logs:
-        action_performed = True
-        print_info(f"Pulling logs for {effective_package_name}...")
-        if os.path.exists('./A2.log'):
-            os.remove("./A2.log")
-        log_path = f"/sdcard/Android/data/{effective_package_name}/files/UnrealGame/A2/A2/Saved/Logs/A2.log"
-        run_command([ADB_PATH, "pull", log_path, "./A2.log"])
-        print_success("Log file pulled to A2.log")
-        sys.exit(0)
-    if args.clearcache:
-        action_performed = True
-        if os.path.exists(CACHE_DIR):
-            shutil.rmtree(CACHE_DIR)
-        if os.path.exists(TEMP_DIR):
-            shutil.rmtree(TEMP_DIR)
-        print_success("Cache and temporary files cleared.")
-        sys.exit(0)
+    try:
+        if args.logs:
+            tip = False
+            action_performed = True
+            packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"], suppress_output=True)
+            installed_packages = []
+            for line in packages_output.splitlines():
+                package = line.replace("package:", "").strip()
+                if package == PACKAGE_NAME or package.startswith("com.LegacyLauncher."):
+                    installed_packages.append(package)
+            
+            if installed_packages:
+                print_info(f"Installed versions: {', '.join(installed_packages)}")
+
+            pulled_logs = []
+            for package in installed_packages:
+                remote_log_path = f"/sdcard/Android/data/{package}/files/UnrealGame/A2/A2/Saved/Logs/A2.log"
+                local_log_filename = f"A2_{package}.log"
+                
+                timestamp = 0
+                try:
+                    stat_cmd = [ADB_PATH, "-s", device_id, "shell", "stat", "-c", "%Y", remote_log_path]
+                    stat_result = subprocess.run(stat_cmd, capture_output=True, text=True)
+                    if stat_result.returncode == 0 and stat_result.stdout.strip().isdigit():
+                        timestamp = int(stat_result.stdout.strip())
+                except Exception:
+                    pass
+
+                if timestamp > 0:
+                    run_command([ADB_PATH, "-s", device_id, "pull", remote_log_path, local_log_filename], suppress_output=True)
+                    if os.path.exists(local_log_filename):
+                        pulled_logs.append((local_log_filename, timestamp))
+                else:
+                    check_result = subprocess.run([ADB_PATH, "-s", device_id, "shell", "ls", remote_log_path], capture_output=True)
+                    if check_result.returncode == 0:
+                        run_command([ADB_PATH, "-s", device_id, "pull", remote_log_path, local_log_filename], suppress_output=True)
+                        if os.path.exists(local_log_filename):
+                            pulled_logs.append((local_log_filename, os.path.getmtime(local_log_filename)))
+            
+            if not pulled_logs:
+                print_error("No logs found on any installed version.", exit_code=None)
+            else:
+                newest_log = max(pulled_logs, key=lambda x: x[1])[0]
+                print_success(f"Newest log found from: {newest_log.replace('A2_', '').replace('.log', '')}")
+                
+                if os.path.exists("A2.log"):
+                    os.remove("A2.log")
+                shutil.move(newest_log, "A2.log")
+                
+                for log_file, _ in pulled_logs:
+                    if log_file != newest_log and os.path.exists(log_file):
+                        os.remove(log_file)
+
+                with open("A2.log", "r", encoding='utf-8', errors='replace') as file:
+                    content = file.read()
+                    print(Fore.LIGHTYELLOW_EX + "\n--- Build Info ---")
+                    find_pattern("Log date", r'Log file open,(.*)', content)
+                    find_pattern("Unreal version/Build Name", r'LogInit: Engine Version: (.*)', content)
+                    find_pattern("Build Date", r'LogInit: Compiled \(64-bit\): (.*)', content)
+                    find_pattern("Headset", r'LogAndroid:   SRC_HMDSystemName: (.*)', content)
+                    defaultmap = re.search('Browse Started Browse: "(.*)"', content)
+                    if defaultmap and "/Game/A2/Maps/Station_Prime/Station_Prime_P" in defaultmap.group(1):
+                        print("Modified APK: True")
+                        tip = True
+                    else:
+                        print("Modified APK: False")
+                    print(Fore.LIGHTYELLOW_EX + "\n--- Session Info ---")
+                    find_pattern("External Provider ID", r'"ExternalProviderId":"(.*?)"', content)
+                    find_pattern("Mothership ID", r'Mothership token generated; ID: (.*?),', content)
+                    find_pattern("Mothership Token", r'Token: (.*)', content)
+                    print(Fore.LIGHTYELLOW_EX + "\n--- User Info ---")
+                    find_pattern("Username", r'"ExternalProviderUsername":"(.*?)"', content)
+                    find_pattern("Level", r'"Progress":(.*?),"', content)
+                    find_pattern("Driftium Balance", r'"name":"Driftium","quantity":(.*?)}', content)
+                    find_pattern("Hypercube Balance", r'"name":"TechPoints","quantity":(.*?)}', content)
+                    match = cosmetics = re.findall('"name":"(.*?)","quantity":1', content)
+                    if match:
+                        print("Owned Costmetics: " + str(len(list(set(cosmetics)))))
+                    else: 
+                        print("Owned Costmetics: Not Found")
+                    print('')
+            if tip:
+                print(Fore.LIGHTYELLOW_EX + "Tip: Session and user info is only included in logs generated by an unmodified game")
+    except FileNotFoundError:
+        print_info("Error: A2.log not found.")
+    except Exception as e:
+        print_info(f"An unexpected error occurred: {e}")
     if args.apk:
         action_performed = True
         apk_path = get_path_from_input(args.apk, "apk")

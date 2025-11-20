@@ -1,9 +1,6 @@
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
 # Orion Drift Legacy Launcher
 
-A script to manipulate Orion Drift APKs
-
-Particularly useful when running old versions of Orion Drift that don't have servers anymore.
+Run old versions of Orion Drift
 
 ## Dependencies
 - Python 3
@@ -31,15 +28,13 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Run the script
+5. Provide a CL, Build number or Version code to install
 
-   `a2ll`
+   Example: `a2ll 5491`
 
-6. If you are prompted to install java follow the instructions and restart your command prompt after.
-
-7. Provide an APK and OBB to install
-
-    All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   
+   Or by running `a2ll -ls`
 </details>
 
 <details>
@@ -65,39 +60,65 @@ Particularly useful when running old versions of Orion Drift that don't have ser
 
    `pipx install a2-legacy-launcher`
 
-5. Run the script
+5. Provide a CL, Build number or Version code to install
 
-   `a2ll`
+   Example: `a2ll 5491`
 
-6. Provide an APK and OBB to install
-
-    All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   
+   Or by running `a2ll -ls`
 
 </details>
 
-To update run:
+<details>
+   <summary>Quest instructions</summary>
+   
+   <br>
+   
+   **Install:**
 
-`pipx upgrade a2-legacy-launcher`
+1. Connect to a computer or [android phone](https://sisik.eu/bugjaeger)
+
+   Run `adb tcpip 5555`
+
+3. Install termux
+
+   [Termux APK](https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3+github-debug_arm64-v8a.apk)
+
+4. Run the helper script in termux
+
+   ```
+   curl -L https://obelous.dev/a2ll.sh | bash
+   ```
+
+</details>
 
 ## Usage
 
 ```
-a2ll [-h] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-rm] [-l] [-op] [-sp] [-sk] [-cc]
+usage: a2ll [-h] [-v] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [download]
 
-A2 Legacy Launcher
+A2 Legacy Launcher 1.1.0
+
+positional arguments:
+  download              Build version to download and install -
 
 options:
   -h, --help            show this help message and exit
-  -a APK, --apk APK     Path/URL to the source APK file
-  -o OBB, --obb OBB     Path/URL to the OBB file
-  -i INI, --ini INI     Path/URL to an Engine.ini
+  -v, --version         show program's version number and exit
+  -a APK, --apk APK     Path/URL to an APK file
+  -o OBB, --obb OBB     Path/URL to an OBB file
+  -i INI, --ini INI     Path/URL/Preset for Engine.ini
+                        Presets: Engine.ini, EngineVegas.ini, Engine4v4.ini, EngineNetworked.ini, EnginePlayerstart.ini
   -c COMMANDLINE, --commandline COMMANDLINE
-                        What commandline options to run A2 with
+                        Launch arguments for A2
   -so SO, --so SO       Inject a custom .so file
-  -rn, --rename         Rename the package to allow multiple installs
-  -rm, --remove         Use this if reinstalling doesnt bring you back to latest
+  -rn, --rename         Rename the package for parallel installs
+  -p, --patch           Remove entitlement check from libUnreal.so
+  -rm, --remove         Uninstall all versions
   -l, --logs            Pull game logs from the headset
-  -op, --open           Open the game once finished
+  -ls, --list           List available versions
+  -op, --open           Launch the game once finished
   -sp, --strip          Strip permissions to skip pompts on first launch
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
@@ -117,18 +138,12 @@ options:
 
 - `--ini` Supports local path, url and these presets `-i Engine.ini`, `-i EngineVegas.ini`, `-i Engine4V4.ini`, `-i EngineNetworked.ini` however nearly all builds use Engine.ini
 
-#### Example commands:
+   > --ini is unique because it can be ran on its own without rebuilding or reinstalling to almost instantly swap out an ini file
 
-1.0.47031:
-```
-a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/A2-Android-Shipping-arm64.apk -o https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.47031/main.64955222.com.AnotherAxiom.A2.obb -i Engine.ini -c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay" -sp -op
-```
+## Comaptibility:
 
-1.0.4383:
-```
-a2ll -a https://dl.obelous.dev/api/raw/?path=/public/A2-archive/1.0.4383/A2%2B1.0.4383-5.1.1-main.apk -i EngineVegas.ini -c="--useinsecure" -rn -sp -op
-```
+**ALL** Known versions can be made to run
 
-## How does it work?
-Rebuilding the APK with debugging enabled gives permission to access the game files without root. <br>
-From there we can place an Engine.ini which overrides the games file letting us load straight into the map without connecting to any servers.
+However: Versions **11235 - 23189** cannot be renamed
+
+For newer versions renaming relies on byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.

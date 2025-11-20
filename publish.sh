@@ -1,3 +1,1 @@
-rm -rf dist
-python3 -m build
-twine upload dist/*
+# This file is no longer used. Publishing is handled by the GitHub Actions workflow.
