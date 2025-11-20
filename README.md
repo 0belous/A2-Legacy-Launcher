@@ -147,3 +147,7 @@ options:
 However: Versions **11235 - 23189** cannot be renamed
 
 For newer versions renaming relies on byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.
+
+<hr>
+
+This product is not affiliated with Another Axiom Inc. or its videogames Gorilla Tag and Orion Drift and is not endorsed or otherwise sponsored by Another Axiom. Portions of the materials contained herein are property of Another Axiom. ©2021 Another Axiom Inc.
