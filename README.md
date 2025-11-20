@@ -146,4 +146,4 @@ options:
 
 However: Versions **11235 - 23189** cannot be renamed
 
-For newer versions renaming relies byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.
+For newer versions renaming relies on byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.
