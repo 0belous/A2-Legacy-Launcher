@@ -624,7 +624,6 @@ def find_pattern(label, pattern, text, default_value="Not Found"):
         print(f"{label}: {match.group(1)}")
     else:
         print(f"{label}: {default_value}")
-        tip = True
 
 def patch_libunreal(obb_path):
     so_file_path = os.path.join(DECOMPILED_DIR, "lib", "arm64-v8a", "libUnreal.so")
@@ -820,41 +819,83 @@ def main():
         if args.logs:
             tip = False
             action_performed = True
-            print_info(f"Pulling logs for {effective_package_name}...")
-            if os.path.exists('./A2.log'):
-                os.remove("./A2.log")
-            log_path = f"/sdcard/Android/data/{effective_package_name}/files/UnrealGame/A2/A2/Saved/Logs/A2.log"
-            run_command([ADB_PATH, "pull", log_path, "./A2.log"])
-            print_success("Log file pulled to A2.log")
-            with open("./A2.log", "r") as file:
-                content = file.read()
-                print(Fore.LIGHTYELLOW_EX + "\n--- Build Info ---")
-                find_pattern("Log date", r'Log file open,(.*)', content)
-                find_pattern("Unreal version/Build Name", r'LogInit: Engine Version: (.*)', content)
-                find_pattern("Build Date", r'LogInit: Compiled \(64-bit\): (.*)', content)
-                find_pattern("Headset", r'LogAndroid:   SRC_HMDSystemName: (.*)', content)
-                defaultmap = re.search('Browse Started Browse: "(.*)"', content)
-                if defaultmap and "/Game/A2/Maps/Station_Prime/Station_Prime_P" in defaultmap.group(1):
-                    print("Modified APK: True")
-                if defaultmap:
-                    print("Modified APK: False")
+            packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"], suppress_output=True)
+            installed_packages = []
+            for line in packages_output.splitlines():
+                package = line.replace("package:", "").strip()
+                if package == PACKAGE_NAME or package.startswith("com.LegacyLauncher."):
+                    installed_packages.append(package)
+            
+            if installed_packages:
+                print_info(f"Installed versions: {', '.join(installed_packages)}")
+
+            pulled_logs = []
+            for package in installed_packages:
+                remote_log_path = f"/sdcard/Android/data/{package}/files/UnrealGame/A2/A2/Saved/Logs/A2.log"
+                local_log_filename = f"A2_{package}.log"
+                
+                timestamp = 0
+                try:
+                    stat_cmd = [ADB_PATH, "-s", device_id, "shell", "stat", "-c", "%Y", remote_log_path]
+                    stat_result = subprocess.run(stat_cmd, capture_output=True, text=True)
+                    if stat_result.returncode == 0 and stat_result.stdout.strip().isdigit():
+                        timestamp = int(stat_result.stdout.strip())
+                except Exception:
+                    pass
+
+                if timestamp > 0:
+                    run_command([ADB_PATH, "-s", device_id, "pull", remote_log_path, local_log_filename], suppress_output=True)
+                    if os.path.exists(local_log_filename):
+                        pulled_logs.append((local_log_filename, timestamp))
                 else:
-                    print("Modified APK: Not Found")
-                print(Fore.LIGHTYELLOW_EX + "\n--- Session Info ---")
-                find_pattern("External Provider ID", r'"ExternalProviderId":"(.*?)"', content)
-                find_pattern("Mothership ID", r'Mothership token generated; ID: (.*?),', content)
-                find_pattern("Mothership Token", r'Token: (.*)', content)
-                print(Fore.LIGHTYELLOW_EX + "\n--- User Info ---")
-                find_pattern("Username", r'"ExternalProviderUsername":"(.*?)"', content)
-                find_pattern("Level", r'"Progress":(.*?),"', content)
-                find_pattern("Driftium Balance", r'"name":"Driftium","quantity":(.*?)}', content)
-                find_pattern("Hypercube Balance", r'"name":"TechPoints","quantity":(.*?)}', content)
-                match = cosmetics = re.findall('"name":"(.*?)","quantity":1', content)
-                if match:
-                    print("Owned Costmetics: " + str(len(list(set(cosmetics)))))
-                else: 
-                    print("Owned Costmetics: Not Found")
-                print('')
+                    check_result = subprocess.run([ADB_PATH, "-s", device_id, "shell", "ls", remote_log_path], capture_output=True)
+                    if check_result.returncode == 0:
+                        run_command([ADB_PATH, "-s", device_id, "pull", remote_log_path, local_log_filename], suppress_output=True)
+                        if os.path.exists(local_log_filename):
+                            pulled_logs.append((local_log_filename, os.path.getmtime(local_log_filename)))
+            
+            if not pulled_logs:
+                print_error("No logs found on any installed version.", exit_code=None)
+            else:
+                newest_log = max(pulled_logs, key=lambda x: x[1])[0]
+                print_success(f"Newest log found from: {newest_log.replace('A2_', '').replace('.log', '')}")
+                
+                if os.path.exists("A2.log"):
+                    os.remove("A2.log")
+                shutil.move(newest_log, "A2.log")
+                
+                for log_file, _ in pulled_logs:
+                    if log_file != newest_log and os.path.exists(log_file):
+                        os.remove(log_file)
+
+                with open("A2.log", "r", encoding='utf-8', errors='replace') as file:
+                    content = file.read()
+                    print(Fore.LIGHTYELLOW_EX + "\n--- Build Info ---")
+                    find_pattern("Log date", r'Log file open,(.*)', content)
+                    find_pattern("Unreal version/Build Name", r'LogInit: Engine Version: (.*)', content)
+                    find_pattern("Build Date", r'LogInit: Compiled \(64-bit\): (.*)', content)
+                    find_pattern("Headset", r'LogAndroid:   SRC_HMDSystemName: (.*)', content)
+                    defaultmap = re.search('Browse Started Browse: "(.*)"', content)
+                    if defaultmap and "/Game/A2/Maps/Station_Prime/Station_Prime_P" in defaultmap.group(1):
+                        print("Modified APK: True")
+                        tip = True
+                    else:
+                        print("Modified APK: False")
+                    print(Fore.LIGHTYELLOW_EX + "\n--- Session Info ---")
+                    find_pattern("External Provider ID", r'"ExternalProviderId":"(.*?)"', content)
+                    find_pattern("Mothership ID", r'Mothership token generated; ID: (.*?),', content)
+                    find_pattern("Mothership Token", r'Token: (.*)', content)
+                    print(Fore.LIGHTYELLOW_EX + "\n--- User Info ---")
+                    find_pattern("Username", r'"ExternalProviderUsername":"(.*?)"', content)
+                    find_pattern("Level", r'"Progress":(.*?),"', content)
+                    find_pattern("Driftium Balance", r'"name":"Driftium","quantity":(.*?)}', content)
+                    find_pattern("Hypercube Balance", r'"name":"TechPoints","quantity":(.*?)}', content)
+                    match = cosmetics = re.findall('"name":"(.*?)","quantity":1', content)
+                    if match:
+                        print("Owned Costmetics: " + str(len(list(set(cosmetics)))))
+                    else: 
+                        print("Owned Costmetics: Not Found")
+                    print('')
             if tip:
                 print(Fore.LIGHTYELLOW_EX + "Tip: Session and user info is only included in logs generated by an unmodified game")
     except FileNotFoundError:
