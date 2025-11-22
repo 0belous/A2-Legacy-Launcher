@@ -23,7 +23,7 @@ import time
 
 init(autoreset=True)
 
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
