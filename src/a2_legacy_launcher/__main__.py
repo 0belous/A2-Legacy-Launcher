@@ -90,10 +90,10 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 if is_windows:
     CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
-    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/Obelous/A2-Legacy-Launcher/main/update.bat"
+    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/0belous/A2-Legacy-Launcher/main/update.bat"
 else:
     CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/Obelous/A2-Legacy-Launcher/main/update.sh"
+    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/0belous/A2-Legacy-Launcher/main/update.sh"
 CMD_TOOLS_ZIP = os.path.join(APP_DATA_DIR, "commandlinetools.zip")
 
 BANNER = r"""
