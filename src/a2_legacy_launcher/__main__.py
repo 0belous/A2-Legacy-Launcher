@@ -161,15 +161,16 @@ def apply_manifest_flags(args, flags_str):
 
 def check_for_updates():
     try:
-        from packaging.version import parse as parse_version
         pypi_url = "https://pypi.org/pypi/a2-legacy-launcher/json"
         response = requests.get(pypi_url, timeout=3)
         response.raise_for_status()
-        latest_version_str = response.json()["info"]["version"]
+        latest_version_str = response.json()["info"]["version"] 
+        def parse_version(v):
+            return [int(x) for x in v.split('.') if x.isdigit()]
         current_version = parse_version(__version__)
         latest_version = parse_version(latest_version_str)
         if latest_version > current_version:
-            print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version}) is available!")
+            print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version_str}) is available!")
             print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher\n")
     except Exception:
         pass

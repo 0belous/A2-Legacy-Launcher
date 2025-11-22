@@ -16,7 +16,6 @@ dependencies = [
     "requests",
     "colorama",
     "pySmartDL",
-    "packaging",
     "pyyaml"
 ]
 
