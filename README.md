@@ -142,6 +142,18 @@ options:
 
    > --ini is unique because it can be ran on its own without rebuilding or reinstalling to almost instantly swap out an ini file
 
+### Config:
+
+The config.yml file located at `%USERPROFILE%/.a2-legacy-launcher/config.yml` currently has these settings:
+
+```yml
+autoupdate: true
+manifest_url: https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json
+```
+Auto update defaults to true so the script will update itself using update.bat or update.sh
+
+The default manifest points to my APK archive, should you want to intergrate your own archive (further than manually using -a and -o) create a manifest like this: https://dl.obelous.dev/public/A2-archive/manifest.json and replace the url in the config.
+
 ## Comaptibility:
 
 **ALL** Known versions can be made to run
