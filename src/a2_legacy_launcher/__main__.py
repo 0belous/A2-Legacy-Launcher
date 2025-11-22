@@ -90,8 +90,10 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 if is_windows:
     CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip"
+    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/Obelous/A2-Legacy-Launcher/main/update.bat"
 else:
     CMD_TOOLS_URL = "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+    UPDATE_SCRIPT_URL = "https://raw.githubusercontent.com/Obelous/A2-Legacy-Launcher/main/update.sh"
 CMD_TOOLS_ZIP = os.path.join(APP_DATA_DIR, "commandlinetools.zip")
 
 BANNER = r"""
@@ -106,7 +108,8 @@ def load_config():
     if not os.path.exists(CONFIG_FILE):
         print_info(f"Creating default configuration at {CONFIG_FILE}")
         default_config = {
-            'manifest_url': 'https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json'
+            'manifest_url': 'https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json',
+            'autoupdate': True
         }
         with open(CONFIG_FILE, 'w') as f:
             yaml.dump(default_config, f)
@@ -171,7 +174,22 @@ def check_for_updates():
         latest_version = parse_version(latest_version_str)
         if latest_version > current_version:
             print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version_str}) is available!")
-            print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher\n")
+            config = load_config()
+            if config.get('autoupdate', True):
+                print_info("Updating...")
+                script_name = "update.bat" if is_windows else "update.sh"
+                script_path = os.path.join(TEMP_DIR, script_name)
+                if download(UPDATE_SCRIPT_URL, script_path):
+                    if is_windows:
+                        subprocess.Popen([script_path], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+                    else:
+                        os.chmod(script_path, 0o755)
+                        subprocess.Popen(["bash", script_path])
+                    sys.exit(0)
+                else:
+                    print_error("Failed to download update script.")
+            else:
+                print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher")
     except Exception:
         pass
 
@@ -261,7 +279,7 @@ def check_and_install_java():
         print_success("Java installation finished.")
         os.remove(installer_path)
         print_info("Please close and re-open your terminal, then run a2ll again.")
-        sys.exit(0)
+        return
     else:
         print_error("Please install Java by running: 'sudo apt update && sudo apt install default-jre'", exit_code=None)
         print_info("Once Java is installed, please re-run a2ll")
@@ -677,7 +695,7 @@ def patch_libunreal(obb_path):
     except Exception as e:
         print_error(f"An unexpected error occurred during patching: {e}")
 
-def main():
+def a2ll():
     parser = argparse.ArgumentParser(
         description="A2 Legacy Launcher "+__version__+" by Obelous ",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -700,7 +718,6 @@ def main():
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
     args = parser.parse_args()
     print(Fore.LIGHTYELLOW_EX + BANNER)
-    check_for_updates()
     
     if args.clearcache:
         action_performed = True
@@ -709,7 +726,7 @@ def main():
         if os.path.exists(TEMP_DIR):
             shutil.rmtree(TEMP_DIR)
         print_success("Cache and temporary files cleared.")
-        sys.exit(0)
+        return
 
     if args.download and args.apk:
         print_error("Cannot specify a version to download and an APK file at the same time.", exit_code=1)
@@ -773,7 +790,7 @@ def main():
                 version_str = version_data.get('version', 'N/A')
                 version_code = version_data.get('version_code', 'N/A')
                 print(f"  - Version: {version_str} ({version_code})")
-        sys.exit(0)
+        return
 
     if not IS_TERMUX:
         check_and_install_java()
@@ -814,7 +831,7 @@ def main():
             print_success(f"Uninstalled {uninstalled_count} package(s).")
         else:
             print_info("No relevant packages found to uninstall.")
-        sys.exit(0)
+        return
     try:
         if args.logs:
             tip = False
@@ -932,6 +949,12 @@ def main():
     if not action_performed:
         print_error("No action specified. Please provide a task like --apk, --ini, etc. Use -h for help.", exit_code=0)
     print(Fore.LIGHTYELLOW_EX + "\n[DONE] All tasks complete. Have fun!")
+
+def main():
+    try:
+        a2ll()
+    finally:
+        check_for_updates()
 
 if __name__ == "__main__":
     main()
