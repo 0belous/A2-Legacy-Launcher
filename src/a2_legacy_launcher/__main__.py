@@ -666,7 +666,7 @@ def patch_libunreal(obb_path):
 
                 offset = mm.find(original_pattern)
                 if offset != -1:
-                    print_info(f"Found offset: {hex(offset)}. Patching...")
+                    print_info(f"Found offset: {hex(offset)}...")
                     mm.seek(offset)
                     mm.write(patched_bytes)
                     mm.flush()
@@ -788,7 +788,6 @@ def main():
     action_performed = False
     if args.remove:
         action_performed = True
-        print_info("Scanning for all installed versions to remove...")
         packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"])
         packages_to_remove = [PACKAGE_NAME]
         for line in packages_output.splitlines():
