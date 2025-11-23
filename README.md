@@ -86,10 +86,12 @@ Run old versions of Orion Drift
    [Termux APK](https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3+github-debug_arm64-v8a.apk)
 
 4. Run the helper script in termux
-
+   
    ```
    curl -L https://obelous.dev/a2ll.sh | bash
    ```
+   
+   I suggest opening this page on the quest browser and copy pasting this command.
 
 </details>
 
@@ -134,13 +136,25 @@ options:
 
 - `--rename` This renames the package to com.LegacyLauncher.A2 to allow for multiple versions to be installed at once, but it must be used in conjunction with `-c="-useinsecure"` on a version where this argument exists.
 
-   > If a renamed version is installed the `--log` argument can be used with `--rename` to pull the logs of the renamed app.
+   > If a renamed version is installed the `--log` argument pulls the logs of the last version to that ran.
 
 - `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
 
 - `--ini` Supports local path, url and these presets `-i Engine.ini`, `-i EngineVegas.ini`, `-i Engine4V4.ini`, `-i EngineNetworked.ini` however nearly all builds use Engine.ini
 
    > --ini is unique because it can be ran on its own without rebuilding or reinstalling to almost instantly swap out an ini file
+
+### Config:
+
+The config.yml file located at `%USERPROFILE%/.a2-legacy-launcher/config.yml` currently has these settings:
+
+```yml
+autoupdate: true
+manifest_url: https://dl.obelous.dev/api/raw/?path=/public/A2-archive/manifest.json
+```
+Auto update defaults to true so the script will update itself using update.bat or update.sh
+
+The default manifest points to my APK archive, should you want to intergrate your own archive (further than manually using -a and -o) create a manifest like this: https://dl.obelous.dev/public/A2-archive/manifest.json and replace the url in the config.
 
 ## Comaptibility:
 
