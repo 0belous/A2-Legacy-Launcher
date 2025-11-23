@@ -86,10 +86,12 @@ Run old versions of Orion Drift
    [Termux APK](https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3+github-debug_arm64-v8a.apk)
 
 4. Run the helper script in termux
-
+   
    ```
    curl -L https://obelous.dev/a2ll.sh | bash
    ```
+   
+   I suggest opening this page on the quest browser and copy pasting this command.
 
 </details>
 
