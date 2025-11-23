@@ -136,7 +136,7 @@ options:
 
 - `--rename` This renames the package to com.LegacyLauncher.A2 to allow for multiple versions to be installed at once, but it must be used in conjunction with `-c="-useinsecure"` on a version where this argument exists.
 
-   > If a renamed version is installed the `--log` argument can be used with `--rename` to pull the logs of the renamed app.
+   > If a renamed version is installed the `--log` argument pulls the logs of the last version to that ran.
 
 - `--commandline` Various features can be unlocked through the use of commandline options, for example: `-c="-loadreplay=../../../A2/Content/Replays/Quests/1DE99EFE4BF8C9948F487DA231824A75.a2replay` or `-c="-nullrhi"`
 
