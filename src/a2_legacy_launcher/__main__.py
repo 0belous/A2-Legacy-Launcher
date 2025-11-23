@@ -20,6 +20,7 @@ from colorama import init
 import shlex
 import yaml
 import time
+import threading
 
 init(autoreset=True)
 
@@ -362,43 +363,37 @@ def rename_package(decompiled_dir, old_pkg, new_pkg):
     print_info(f"Renaming package...")
     manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
     yml_path = os.path.join(decompiled_dir, "apktool.yml")
-    for file_path in [manifest_path, yml_path]:
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            content = content.replace(old_pkg, new_pkg)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-        except Exception as e:
-            print_error(f"Failed to modify {os.path.basename(file_path)}: {e}")
-    old_pkg_path_part = old_pkg.replace('.', os.sep)
-    new_pkg_path_part = new_pkg.replace('.', os.sep)
-    for root, _, files in os.walk(decompiled_dir):
-        for name in files:
-            file_path = os.path.join(root, name)
-            try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                smali_old = 'L' + old_pkg.replace('.', '/')
-                smali_new = 'L' + new_pkg.replace('.', '/')
-                if smali_old in content or old_pkg in content:
-                    content = content.replace(smali_old, smali_new)
-                    content = content.replace(old_pkg, new_pkg)
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-            except Exception as e:
-                print_info(f"Could not process file {file_path}: {e}")
-    for smali_dir_name in os.listdir(decompiled_dir):
-        if smali_dir_name.startswith('smali'):
-            old_path = os.path.join(decompiled_dir, smali_dir_name, old_pkg_path_part)
-            new_path = os.path.join(decompiled_dir, smali_dir_name, new_pkg_path_part)
-            if os.path.isdir(old_path):
-                os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                shutil.move(old_path, new_path)
-                try:
-                    os.removedirs(os.path.dirname(old_path))
-                except OSError:
-                    pass
+    try:
+        ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+        tree = ET.parse(manifest_path)
+        root = tree.getroot()
+        if root.get('package') == old_pkg:
+            root.set('package', new_pkg)
+        ns = {'android': 'http://schemas.android.com/apk/res/android'}
+        component_tags = {'application', 'activity', 'activity-alias', 'service', 'receiver', 'provider'}
+        for elem in root.iter():
+            tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+            if tag_name in component_tags:
+                aname = f"{{{ns['android']}}}name"
+                val = elem.get(aname)
+                if val:
+                    if val.startswith('.'):
+                        elem.set(aname, old_pkg + val)
+                    elif '.' not in val:
+                        elem.set(aname, old_pkg + '.' + val)
+            if tag_name == 'provider':
+                auth = f"{{{ns['android']}}}authorities"
+                val = elem.get(auth)
+                if val and old_pkg in val:
+                    elem.set(auth, val.replace(old_pkg, new_pkg))
+        tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
+        with open(yml_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        content = content.replace(old_pkg, new_pkg)
+        with open(yml_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        print_error(f"Failed to modify manifest: {e}")
 
 def inject_so(decompiled_dir, so_filename):
     print_info(f"Injecting {so_filename}...")
@@ -459,7 +454,7 @@ def inject_so(decompiled_dir, so_filename):
 def process_apk(apk_path, args):
     if not args.skipdecompile:
         print_info("Decompiling APK...")
-        run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
+        run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
     else:
         print_info("Skipping decompilation, using previously decompiled files.")
         if not os.path.isdir(DECOMPILED_DIR):
@@ -467,30 +462,24 @@ def process_apk(apk_path, args):
         for f in [COMPILED_APK, ALIGNED_APK, SIGNED_APK]:
             if os.path.exists(f):
                 os.remove(f)
-
     if args.rename:
         rename_package(DECOMPILED_DIR, PACKAGE_NAME, NEW_PACKAGE_NAME)
-
     if args.strip:
         print_info("Stripping permissions...")
         modify_manifest(DECOMPILED_DIR)
-
     if args.commandline:
         ue_cmdline_path = os.path.join(DECOMPILED_DIR, "assets", "UECommandLine.txt")
         os.makedirs(os.path.dirname(ue_cmdline_path), exist_ok=True)
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
-
     if args.so:
         so_path = get_path_from_input(args.so, "so")
         if so_path:
             inject_so(DECOMPILED_DIR, so_path)
-
     if args.patch:
         if not args.obb:
             print_error("Cannot use --patch without an --obb file.", exit_code=None)
         patch_libunreal(get_path_from_input(args.obb, "obb"))
-
     print_info("Recompiling APK...")
     recompile_cmd = ["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK]
     if IS_TERMUX:
@@ -506,9 +495,10 @@ def process_apk(apk_path, args):
     run_command([APKSIGNER_PATH, "sign", "--ks", KEYSTORE_FILE, "--ks-pass", f"env:KEYSTORE_PASSWORD", "--out", SIGNED_APK, ALIGNED_APK], env=signing_env)
     print_success("APK processing complete.")
 
-def install_modded_apk(device_id, package_name):
-    print_info(f"Uninstalling {package_name}...")
-    subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], check=False, capture_output=True)
+def install_modded_apk(device_id, package_name, skip_uninstall=False):
+    if not skip_uninstall:
+        print_info(f"Uninstalling {package_name}...")
+        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], check=False, capture_output=True)
     print_info("Installing modified APK...")
     run_command([ADB_PATH, "-s", device_id, "install", "-r", SIGNED_APK])
     print_success("Installation complete.")
@@ -919,21 +909,30 @@ def a2ll():
         print_info("Error: A2.log not found.")
     except Exception as e:
         print_info(f"An unexpected error occurred: {e}")
+    apk_path = None
+    obb_path = None
+    obb_thread = None
     if args.apk:
         action_performed = True
         apk_path = get_path_from_input(args.apk, "apk")
         if not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
-        if not args.skipdecompile:
-            clean_temp_dir()
-        process_apk(apk_path, args)
-        install_modded_apk(device_id, effective_package_name)
+        print_info(f"Uninstalling {effective_package_name}...")
+        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", effective_package_name], check=False, capture_output=True)
     if args.obb:
         action_performed = True
         obb_path = get_path_from_input(args.obb, "obb")
         if not obb_path.lower().endswith(".obb"):
             print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{obb_path}'")
-        upload_obb(device_id, obb_path, effective_package_name, args.rename)
+        obb_thread = threading.Thread(target=upload_obb, args=(device_id, obb_path, effective_package_name, args.rename))
+        obb_thread.start()
+    if apk_path:
+        if not args.skipdecompile:
+            clean_temp_dir()
+        process_apk(apk_path, args)
+        install_modded_apk(device_id, effective_package_name)
+    if obb_thread:
+        obb_thread.join()
     if args.ini:
         action_performed = True
         ini_path = get_path_from_input(args.ini, "ini")

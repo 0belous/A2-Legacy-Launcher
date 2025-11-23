@@ -3,7 +3,6 @@ export PATH="$PATH:$HOME/.local/bin"
 
 install_dependencies() {
     DEBIAN_FRONTEND=noninteractive apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confold" upgrade 
     DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" android-tools python git unzip aapt apksigner jq termux-api dialog
     python -m pip install pipx
     python -m pipx install a2_legacy_launcher
@@ -17,6 +16,11 @@ LINE_COUNT=$(echo "$OUTPUT" | wc -l)
 if [ $? -ne 0 ] || [ "$LINE_COUNT" -lt 10 ]; then
     install_dependencies
     OUTPUT=$(a2ll -ls 2>&1)
+fi
+
+CONFIG_FILE="$HOME/.config/a2-legacy-launcher/config.yml"
+if [ -f "$CONFIG_FILE" ]; then
+    sed -i 's/autoupdate: [tT]rue/autoupdate: false/' "$CONFIG_FILE"
 fi
 
 if ! command -v dialog &> /dev/null; then
