@@ -77,7 +77,7 @@ Run old versions of Orion Drift
    
    **Install:**
 
-1. Connect to a computer or [android phone](https://sisik.eu/bugjaeger)
+1. Connect to a computer or [android phone](https://play.google.com/store/apps/details?id=eu.sisik.hackendebug)
 
    Run `adb tcpip 5555`
 
