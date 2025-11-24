@@ -186,6 +186,7 @@ def check_for_updates():
                     else:
                         os.chmod(script_path, 0o755)
                         subprocess.Popen(["bash", script_path])
+                    print_info("Now updating: Please wait 5-10 seconds before running the next command")
                     sys.exit(0)
                 else:
                     print_error("Failed to download update script.")
@@ -255,7 +256,6 @@ def download(url, filename):
         obj = SmartDL(url, dest=filename, progress_bar=True)
         obj.start()
         if obj.isSuccessful():
-            print("\nDownload complete.")
             return True
         else:
             print_error(f"Failed to download file: {obj.get_errors()}")
@@ -641,6 +641,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '67287493': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48674
         '66591868': b'\x40\x0A\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48110
         '65824486': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47702
         '65425880': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47514
