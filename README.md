@@ -16,25 +16,26 @@ Run old versions of Orion Drift
 
 1. Install pipx
 
-   `pip install --user pipx`
+   `py -m pip install --user pipx`
 
 2. Add pipx to PATH
 
    `py -m pipx ensurepath`
 
-3. Reopen command prompt
+3. **Close and re-open command prompt**
 
 4. Install legacy launcher
 
    `pipx install a2-legacy-launcher`
 
-5. Provide a CL, Build number or Version code to install
+5. Run Legacy Launcher
 
-   Example: `a2ll 5491`
+   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
 
-   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   Check `a2ll -ls` or the archive for available versions.
    
-   Or by running `a2ll -ls`
+   `a2ll 4383`
+   
 </details>
 
 <details>
