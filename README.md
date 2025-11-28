@@ -32,7 +32,7 @@ Run old versions of Orion Drift
 
    You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
 
-   Check `a2ll -ls` or the archive for available versions.
+   Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
    
    `a2ll 4383`
    
@@ -61,13 +61,13 @@ Run old versions of Orion Drift
 
    `pipx install a2-legacy-launcher`
 
-5. Provide a CL, Build number or Version code to install
+5. Run Legacy Launcher
 
-   Example: `a2ll 5491`
+   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
 
-   All old versions can be found here: https://dl.obelous.dev/public/A2-archive/
+   Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
    
-   Or by running `a2ll -ls`
+   `a2ll 4383`
 
 </details>
 
