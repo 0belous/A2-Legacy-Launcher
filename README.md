@@ -129,7 +129,7 @@ options:
 
 #### Extra context:
 
-- `a2ll [version code/CL/1.0.CL]` This automatically downloads a version and uses the correct flags to install it, renaming if possible (see compatibility below). The manifest used to determine the download URLs and flags is cached for 24 hours on your system, to force a refresh run `a2ll --clearcache`
+- `a2ll [version code/CL/1.0.CL]` This automatically downloads a version and uses the correct flags to install it, renaming if possible (see compatibility below).
 
 - `--clearcache` When providing a URL to the APK OBB or INI argument the script downloads and caches the file, to free up storage and delete cached downloads run the script with this argument.
 

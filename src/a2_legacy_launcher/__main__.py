@@ -347,12 +347,17 @@ def modify_manifest(decompiled_dir):
         with open(manifest_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         modified_lines = []
+        added_hand_tracking = False
         for line in lines:
             if any(permission in line for permission in permissions_to_remove):
                 continue
             if 'android.hardware.microphone' in line and 'android:required="true"' in line:
                 modified_lines.append(line.replace('android:required="true"', 'android:required="false"'))
                 continue
+            if not added_hand_tracking and "<application" in line:
+                modified_lines.append('    <uses-permission android:name="com.oculus.permission.HAND_TRACKING"/>\n')
+                modified_lines.append('    <uses-feature android:name="oculus.software.handtracking" android:required="false"/>\n')
+                added_hand_tracking = True
             modified_lines.append(line)
         with open(manifest_path, 'w', encoding='utf-8') as f:
             f.writelines(modified_lines)
@@ -727,14 +732,13 @@ def a2ll():
         manifest_url = config.get('manifest_url')
         if not manifest_url:
             print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
-        manifest_path = get_path_from_input(manifest_url, "json")
-        if not manifest_path:
-            print_error("Failed to download manifest.", exit_code=1)
         try:
-            with open(manifest_path, 'r') as f:
-                manifest = json.load(f)
+            print_info("Fetching manifest...")
+            response = requests.get(manifest_url, timeout=10)
+            response.raise_for_status()
+            manifest = response.json()
         except Exception as e:
-            print_error(f"Failed to read or parse manifest file: {e}")
+            print_error(f"Failed to download manifest: {e}")
         version_data = find_version_in_manifest(manifest, args.download)
         if not version_data:
             print_error(f"Version '{args.download}' not found in the manifest.")
@@ -764,14 +768,14 @@ def a2ll():
         manifest_url = config.get('manifest_url')
         if not manifest_url:
             print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
-        manifest_path = get_path_from_input(manifest_url, "json")
-        if not manifest_path:
-            print_error("Failed to download manifest.", exit_code=1)
+        
         try:
-            with open(manifest_path, 'r') as f:
-                manifest = json.load(f)
+            print_info("Fetching manifest...")
+            response = requests.get(manifest_url, timeout=10)
+            response.raise_for_status()
+            manifest = response.json()
         except Exception as e:
-            print_error(f"Failed to read or parse manifest file: {e}")
+            print_error(f"Failed to download manifest: {e}")
         
         versions = manifest.get('versions', [])
         if not versions:
@@ -897,7 +901,7 @@ def a2ll():
                     print(Fore.LIGHTYELLOW_EX + "\n--- User Info ---")
                     find_pattern("Username", r'"ExternalProviderUsername":"(.*?)"', content)
                     find_pattern("Level", r'"Progress":(.*?),"', content)
-                    find_pattern("Driftium Balance", r'"name":"Driftium","quantity":(.*?)}', content)
+                    find_pattern("Driftium Balance", r'"name":"Drivium","quantity":(.*?)}', content)
                     find_pattern("Hypercube Balance", r'"name":"TechPoints","quantity":(.*?)}', content)
                     match = cosmetics = re.findall('"name":"(.*?)","quantity":1', content)
                     if match:
