@@ -354,6 +354,9 @@ def modify_manifest(decompiled_dir):
             if 'android.hardware.microphone' in line and 'android:required="true"' in line:
                 modified_lines.append(line.replace('android:required="true"', 'android:required="false"'))
                 continue
+            if 'com.epicgames.unreal.GameActivity.bVerifyOBBOnStartUp' in line:
+                modified_lines.append(line.replace('android:value="true"', 'android:value="false"'))
+                continue
             if not added_hand_tracking and "<application" in line:
                 modified_lines.append('    <uses-permission android:name="com.oculus.permission.HAND_TRACKING"/>\n')
                 modified_lines.append('    <uses-feature android:name="oculus.software.handtracking" android:required="false"/>\n')
@@ -646,6 +649,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '68442501': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49423
         '68229017': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49041
         '67287493': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48674
         '66591868': b'\x40\x0A\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48110
@@ -668,7 +672,7 @@ def patch_libunreal(obb_path):
     version_code = match.group(1)
     original_pattern = version_patterns.get(version_code)
     if not original_pattern:
-        print_error(f"No pattern found for: '{version_code}'. Please remove the --patch argument.", exit_code=None)
+        print_error(f"No pattern found for: '{version_code}'.", exit_code=None)
         return
     print_info(f"Patching version {version_code}...")
     patched_bytes = b'\x1F\x20\x03\xD5'
