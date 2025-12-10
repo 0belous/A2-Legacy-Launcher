@@ -164,6 +164,23 @@ def apply_manifest_flags(args, flags_str):
         i += 1
 
 def check_for_updates():
+    def run_update():
+        config = load_config()
+        if config.get('autoupdate', True):
+            script_name = "update.bat" if is_windows else "update.sh"
+            script_path = os.path.join(TEMP_DIR, script_name)
+            if download(UPDATE_SCRIPT_URL, script_path):
+                if is_windows:
+                    subprocess.Popen([script_path], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    os.chmod(script_path, 0o755)
+                    subprocess.Popen(["bash", script_path])
+                print_info("Now updating: Please wait 5-10 seconds before running the next command")
+                sys.exit(0)
+            else:
+                print_error("Failed to download update script.")
+        else:
+            return
     try:
         pypi_url = "https://pypi.org/pypi/a2-legacy-launcher/json"
         response = requests.get(pypi_url, timeout=3)
@@ -175,25 +192,9 @@ def check_for_updates():
         latest_version = parse_version(latest_version_str)
         if latest_version > current_version:
             print(Fore.YELLOW + f"\n[UPDATE] A new version ({latest_version_str}) is available!")
-            config = load_config()
-            if config.get('autoupdate', True):
-                print_info("Updating...")
-                script_name = "update.bat" if is_windows else "update.sh"
-                script_path = os.path.join(TEMP_DIR, script_name)
-                if download(UPDATE_SCRIPT_URL, script_path):
-                    if is_windows:
-                        subprocess.Popen([script_path], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
-                    else:
-                        os.chmod(script_path, 0o755)
-                        subprocess.Popen(["bash", script_path])
-                    print_info("Now updating: Please wait 5-10 seconds before running the next command")
-                    sys.exit(0)
-                else:
-                    print_error("Failed to download update script.")
-            else:
-                print(Fore.YELLOW + "Please upgrade by running: pipx upgrade a2-legacy-launcher")
+            run_update()
     except Exception:
-        pass
+        run_update()
 
 def print_info(message):
     print(f"[INFO] {message}")
@@ -462,7 +463,10 @@ def inject_so(decompiled_dir, so_filename):
 def process_apk(apk_path, args):
     if not args.skipdecompile:
         print_info("Decompiling APK...")
-        run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+        if not args.so:
+            run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+        else: 
+            run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
     else:
         print_info("Skipping decompilation, using previously decompiled files.")
         if not os.path.isdir(DECOMPILED_DIR):
@@ -649,6 +653,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '68839491': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49567
         '68442501': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49423
         '68229017': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49041
         '67287493': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48674
