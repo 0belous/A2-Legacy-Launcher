@@ -72,6 +72,51 @@ Run old versions of Orion Drift
 </details>
 
 <details>
+   <summary>MacOS instructions:</summary>
+   
+   <br>
+
+   > [!NOTE]
+   > Currently only Intel Macs are supported, if you own an ARM Mac please DM me
+   
+   **Install:**
+
+1. Install homebrew
+
+   `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+
+1. Insall dependencies
+
+   `brew install python3 pipx openjdk`
+
+2. Add pipx to PATH
+
+   `pipx ensurepath`
+
+3. **Close and re-open terminal**
+
+4. Add java to PATH
+
+   `sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk`
+   `echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc`
+   `echo 'export CPPFLAGS="-I/opt/homebrew/opt/openjdk/include"' >> ~/.zshrc`
+   `source ~/.zshrc`
+
+5. Install legacy launcher
+
+   `pipx install a2-legacy-launcher`
+
+6. Run Legacy Launcher
+
+   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
+
+   Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
+   
+   `a2ll 4383`
+
+</details>
+
+<details>
    <summary>Quest instructions</summary>
    
    <br>
