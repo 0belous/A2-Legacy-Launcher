@@ -85,28 +85,28 @@ Run old versions of Orion Drift
 
    `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 
-1. Insall dependencies
+2. Insall dependencies
 
    `brew install python3 pipx openjdk`
 
-2. Add pipx to PATH
+3. Add pipx to PATH
 
    `pipx ensurepath`
 
-3. **Close and re-open terminal**
+4. **Close and re-open terminal**
 
-4. Add java to PATH
+5. Add java to PATH
 
    `sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk`
    `echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc`
    `echo 'export CPPFLAGS="-I/opt/homebrew/opt/openjdk/include"' >> ~/.zshrc`
    `source ~/.zshrc`
 
-5. Install legacy launcher
+6. Install legacy launcher
 
    `pipx install a2-legacy-launcher`
 
-6. Run Legacy Launcher
+7. Run Legacy Launcher
 
    You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
 
