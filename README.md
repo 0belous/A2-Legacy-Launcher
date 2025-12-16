@@ -76,7 +76,6 @@ Run old versions of Orion Drift
    
    <br>
 
-   > [!NOTE]
    > Currently only Intel Macs are supported, if you own an ARM Mac please DM me
    
    **Install:**
