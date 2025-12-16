@@ -84,7 +84,7 @@ Run old versions of Orion Drift
 
    `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 
-2. Insall dependencies
+2. Install dependencies
 
    `brew install python3 pipx openjdk`
 

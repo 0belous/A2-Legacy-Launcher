@@ -811,7 +811,7 @@ def a2ll():
     action_performed = False
     if args.remove:
         action_performed = True
-        packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"])
+        packages_output = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"], suppress_output=True)
         packages_to_remove = [PACKAGE_NAME]
         for line in packages_output.splitlines():
             package = line.replace("package:", "").strip()
@@ -820,17 +820,13 @@ def a2ll():
         
         uninstalled_count = 0
         for package in set(packages_to_remove):
-            print_info(f"Attempting to uninstall {package}...")
             target_dir = f"files/UnrealGame/A2/A2/Saved/Config/Android"
             shell_command = f"run-as {package} sh -c 'chmod -R 777 {target_dir} 2>/dev/null;'"
             subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
-            
             uninstall_result = subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package], capture_output=True, text=True)
             if "Success" in uninstall_result.stdout:
                 print_success(f"{package} has been uninstalled.")
                 uninstalled_count += 1
-            elif "not installed for user" not in uninstall_result.stderr:
-                 print_info(f"{package} was not installed.")
 
         if uninstalled_count > 0:
             print_success(f"Uninstalled {uninstalled_count} package(s).")
