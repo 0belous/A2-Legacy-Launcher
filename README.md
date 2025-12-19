@@ -30,11 +30,14 @@ Run old versions of Orion Drift
 
 5. Run Legacy Launcher
 
-   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
-
    Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
    
-   `a2ll 4383`
+   ```
+   These all install the same version:
+   a2ll 1.0.25889
+   a2ll 25889
+   a2ll 41924491
+   ```
    
 </details>
 
@@ -63,11 +66,14 @@ Run old versions of Orion Drift
 
 5. Run Legacy Launcher
 
-   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
-
    Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
    
-   `a2ll 4383`
+   ```
+   These all install the same version:
+   a2ll 1.0.25889
+   a2ll 25889
+   a2ll 41924491
+   ```
 
 </details>
 
@@ -107,11 +113,14 @@ Run old versions of Orion Drift
 
 7. Run Legacy Launcher
 
-   You can now use the tool. Provide a specific build number (e.g., 4383) to install. 
-
    Check `a2ll -ls` or [the archive](https://dl.obelous.dev/public/A2-archive/) for available versions.
    
-   `a2ll 4383`
+   ```
+   These all install the same version:
+   a2ll 1.0.25889
+   a2ll 25889
+   a2ll 41924491
+   ```
 
 </details>
 
@@ -143,9 +152,9 @@ Run old versions of Orion Drift
 ## Usage
 
 ```
-usage: a2ll [-h] [-v] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [download]
+usage: a2ll [-h] [-v] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [-r] [download]
 
-A2 Legacy Launcher 1.1.0
+A2 Legacy Launcher
 
 positional arguments:
   download              Build version to download and install -
@@ -169,6 +178,7 @@ options:
   -sp, --strip          Strip permissions to skip pompts on first launch
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
+  -r, --restore         Restore to the latest version
 ```
 
 #### Extra context:

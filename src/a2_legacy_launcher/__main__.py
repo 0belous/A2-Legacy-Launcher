@@ -24,7 +24,7 @@ import threading
 
 init(autoreset=True)
 
-__version__ = "1.1.13"
+__version__ = "1.1.14"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
@@ -653,6 +653,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '69639244': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50346
         '68839491': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49567
         '68442501': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49423
         '68229017': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49041
@@ -722,17 +723,19 @@ def a2ll():
     parser.add_argument("-sp", "--strip", action="store_true", help="Strip permissions to skip pompts on first launch")
     parser.add_argument("-sk", "--skipdecompile", action="store_true", help="Reuse previously decompiled files")
     parser.add_argument("-cc", "--clearcache", action="store_true", help="Delete cached downloads")
+    parser.add_argument("-r", "--restore", action="store_true", help="Restore to the latest version")
     args = parser.parse_args()
     print(Fore.LIGHTYELLOW_EX + BANNER)
     
-    if args.clearcache:
+    if args.clearcache or args.remove:
         action_performed = True
         if os.path.exists(CACHE_DIR):
             shutil.rmtree(CACHE_DIR)
         if os.path.exists(TEMP_DIR):
             shutil.rmtree(TEMP_DIR)
         print_success("Cache and temporary files cleared.")
-        return
+        if not args.remove:
+            return
 
     if args.download and args.apk:
         print_error("Cannot specify a version to download and an APK file at the same time.", exit_code=1)
@@ -825,7 +828,6 @@ def a2ll():
             subprocess.run([ADB_PATH, "-s", device_id, "shell", shell_command], capture_output=True, text=True)
             uninstall_result = subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package], capture_output=True, text=True)
             if "Success" in uninstall_result.stdout:
-                print_success(f"{package} has been uninstalled.")
                 uninstalled_count += 1
 
         if uninstalled_count > 0:
@@ -833,6 +835,34 @@ def a2ll():
         else:
             print_info("No relevant packages found to uninstall.")
         return
+
+    if args.restore:
+        action_performed = True
+        config = load_config()
+        manifest_url = config.get('manifest_url')
+        if not manifest_url:
+            print_error(f"Manifest URL not found in {CONFIG_FILE}. Please add it.")
+        try:
+            print_info("Fetching manifest...")
+            response = requests.get(manifest_url, timeout=10)
+            response.raise_for_status()
+            manifest = response.json()
+        except Exception as e:
+            print_error(f"Failed to download manifest: {e}")
+        versions = manifest.get('versions', [])
+        if not versions:
+            print_error("No versions found in manifest.")
+        latest_version = max(versions, key=lambda v: v.get('version_code') or 0)
+        print_success(f"Restoring to latest version: {latest_version.get('version')}")
+        apk_path = get_path_from_input(latest_version.get('apk_url'), "apk")
+        obb_path = get_path_from_input(latest_version.get('obb_url'), "obb")
+        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", PACKAGE_NAME], check=False, capture_output=True)
+        obb_thread = threading.Thread(target=upload_obb, args=(device_id, obb_path, PACKAGE_NAME, False))
+        obb_thread.start()
+        print_info("Installing APK...")
+        run_command([ADB_PATH, "-s", device_id, "install", "-r", apk_path])
+        obb_thread.join()
+
     try:
         if args.logs:
             tip = False
