@@ -461,12 +461,13 @@ def inject_so(decompiled_dir, so_filename):
     print_success(f"Successfully injected loadLibrary call for '{lib_name}'.")
 
 def process_apk(apk_path, args):
+    java_heap = "-Xmx512m" if IS_TERMUX else "-Xmx2048m"
     if not args.skipdecompile:
         print_info("Decompiling APK...")
         if not args.so:
-            run_command(["java", "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
+            run_command(["java", java_heap, "-jar", APKTOOL_JAR, "d", "-s", apk_path, "-o", DECOMPILED_DIR])
         else: 
-            run_command(["java", "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
+            run_command(["java", java_heap, "-jar", APKTOOL_JAR, "d", apk_path, "-o", DECOMPILED_DIR])
     else:
         print_info("Skipping decompilation, using previously decompiled files.")
         if not os.path.isdir(DECOMPILED_DIR):
@@ -507,13 +508,18 @@ def process_apk(apk_path, args):
     run_command([APKSIGNER_PATH, "sign", "--ks", KEYSTORE_FILE, "--ks-pass", f"env:KEYSTORE_PASSWORD", "--out", SIGNED_APK, ALIGNED_APK], env=signing_env)
     print_success("APK processing complete.")
 
-def install_modded_apk(device_id, package_name, skip_uninstall=False):
-    if not skip_uninstall:
-        print_info(f"Uninstalling {package_name}...")
-        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], check=False, capture_output=True)
+def install_modded_apk(device_id, package_name):
     print_info("Installing modified APK...")
-    run_command([ADB_PATH, "-s", device_id, "install", "-r", SIGNED_APK])
-    print_success("Installation complete.")
+    proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "-r", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
+    if "Success" in proc.stdout:
+        return False
+    if "INSTALL_FAILED_UPDATE_INCOMPATIBLE" in proc.stderr or "INSTALL_FAILED_VERSION_DOWNGRADE" in proc.stderr:
+        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], capture_output=True)
+        proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
+        if "Success" in proc.stdout:
+            return True
+    print_error(f"Installation failed: {proc.stdout}\n{proc.stderr}")
+    return False
 
 def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
     if is_renamed:
@@ -522,8 +528,19 @@ def upload_obb(device_id, obb_file, effective_package_name, is_renamed):
     else:
         final_obb_name = os.path.basename(obb_file)
     destination_dir = f"/sdcard/Android/obb/{effective_package_name}/"
-    run_command([ADB_PATH, "-s", device_id, "shell", "mkdir", "-p", destination_dir])
-    destination_path = os.path.join(destination_dir, final_obb_name).replace('\\', '/')
+    destination_path = destination_dir + final_obb_name
+    try:
+        local_size = os.path.getsize(obb_file)
+        subprocess.run([ADB_PATH, "-s", device_id, "shell", f"mkdir -p {destination_dir}"], capture_output=True)
+        res = subprocess.run([ADB_PATH, "-s", device_id, "shell", f"stat -c %s {destination_path}"], capture_output=True, text=True)
+        if res.returncode == 0 and res.stdout.strip().isdigit():
+            remote_size = int(res.stdout.strip())
+            if remote_size == local_size:
+                print_success("OBB already exists. Skipping OBB upload.")
+                return
+    except Exception as e:
+        print_info(f"Error checking OBB status: {e}. Proceeding with upload.")
+
     print_info(f"Uploading OBB...")
     run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
     print_success("OBB upload complete.")
@@ -653,6 +670,7 @@ def patch_libunreal(obb_path):
         return
 
     version_patterns = {
+        '70070810': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50516
         '69971476': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50451
         '69639244': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50346
         '68839491': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49567
@@ -959,8 +977,6 @@ def a2ll():
         apk_path = get_path_from_input(args.apk, "apk")
         if not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
-        print_info(f"Uninstalling {effective_package_name}...")
-        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", effective_package_name], check=False, capture_output=True)
     if args.obb:
         action_performed = True
         obb_path = get_path_from_input(args.obb, "obb")
@@ -972,9 +988,11 @@ def a2ll():
         if not args.skipdecompile:
             clean_temp_dir()
         process_apk(apk_path, args)
-        install_modded_apk(device_id, effective_package_name)
+        was_wiped = install_modded_apk(device_id, effective_package_name)
     if obb_thread:
         obb_thread.join()
+        if was_wiped and obb_path:
+            upload_obb(device_id, obb_path, effective_package_name, args.rename)
     if args.ini:
         action_performed = True
         ini_path = get_path_from_input(args.ini, "ini")
