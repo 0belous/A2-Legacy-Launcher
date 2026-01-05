@@ -211,14 +211,6 @@ Auto update defaults to true so the script will update itself using update.bat o
 
 The default manifest points to my APK archive, should you want to intergrate your own archive (further than manually using -a and -o) create a manifest like this: https://dl.obelous.dev/public/A2-archive/manifest.json and replace the url in the config.
 
-## Comaptibility:
-
-**ALL** Known versions can be made to run
-
-However: Versions **11235 - 23189** cannot be renamed
-
-For newer versions renaming relies on byte-pattern matching, so each new release requires addition of a corresponding pattern to this script.
-
 <hr>
 
 This product is not affiliated with Another Axiom Inc. or its videogames Gorilla Tag and Orion Drift and is not endorsed or otherwise sponsored by Another Axiom.
