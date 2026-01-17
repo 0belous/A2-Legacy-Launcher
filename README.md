@@ -2,6 +2,8 @@
 
 Run old versions of Orion Drift
 
+[Repo Mirror](https://git.obelous.dev/obelous/A2-Legacy-Launcher)
+
 ## Dependencies
 - Python 3
 
