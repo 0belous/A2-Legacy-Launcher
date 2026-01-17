@@ -24,7 +24,7 @@ import threading
 
 init(autoreset=True)
 
-__version__ = "1.1.20"
+__version__ = "1.2.0"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
@@ -128,7 +128,8 @@ def find_version_in_manifest(manifest, identifier):
     except ValueError:
         identifier_int = None
 
-    for version_data in manifest.get('versions', []):
+    versions = manifest.get('versions', [])
+    for version_data in versions:
         if identifier_int is not None and version_data.get('version_number') == identifier_int:
             return version_data
         if identifier_int is not None and version_data.get('version_code') == identifier_int:
@@ -137,7 +138,18 @@ def find_version_in_manifest(manifest, identifier):
             return version_data
         if version_data.get('version') == f"1.0.{identifier_str}":
             return version_data
-            
+
+    date_match = re.match(r'^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$', identifier_str)
+    if date_match:
+        year, month, day = date_match.groups()
+        target_date = year
+        if month: target_date += f"-{month.zfill(2)}"
+        if day: target_date += f"-{day.zfill(2)}"
+        versions_with_dates = [v for v in versions if v.get('build_date')]
+        sorted_versions = sorted(versions_with_dates, key=lambda x: x['build_date'])
+        for v in sorted_versions:
+            if v['build_date'] >= target_date:
+                return v
     return None
 
 def apply_manifest_flags(args, flags_str):
@@ -147,8 +159,10 @@ def apply_manifest_flags(args, flags_str):
     i = 0
     while i < len(parsed_flags):
         flag = parsed_flags[i]
-        if flag == "--patch":
-            args.patch = True
+        if flag in ("-p", "--patch"):
+            if args.patch is None and i + 1 < len(parsed_flags):
+                args.patch = parsed_flags[i+1]
+                i += 1
         elif flag == "--rename":
             args.rename = True
         elif flag == "--strip":
@@ -490,9 +504,7 @@ def process_apk(apk_path, args):
         if so_path:
             inject_so(DECOMPILED_DIR, so_path)
     if args.patch:
-        if not args.obb:
-            print_error("Cannot use --patch without an --obb file.", exit_code=None)
-        patch_libunreal(get_path_from_input(args.obb, "obb"))
+        patch_libunreal(args.patch)
     print_info("Recompiling APK...")
     recompile_cmd = ["java", "-jar", APKTOOL_JAR, "b", DECOMPILED_DIR, "-d", "-o", COMPILED_APK]
     if IS_TERMUX:
@@ -663,55 +675,18 @@ def find_pattern(label, pattern, text, default_value="Not Found"):
     else:
         print(f"{label}: {default_value}")
 
-def patch_libunreal(obb_path):
+def patch_libunreal(pattern_hex):
     so_file_path = os.path.join(DECOMPILED_DIR, "lib", "arm64-v8a", "libUnreal.so")
     if not os.path.exists(so_file_path):
         print_error(f"Could not find libUnreal.so at:\n{so_file_path}", exit_code=None)
         return
 
-    version_patterns = {
-        '72057172': b'\x00\xFC\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.51316
-        '71516834': b'\x9A\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50939
-        '70070810': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50516
-        '69971476': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50451
-        '69639244': b'\xA0\xFD\x08\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.50346
-        '68839491': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49567
-        '68442501': b'\xA6\x02\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49423
-        '68229017': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.49041
-        '67287493': b'\x2E\x03\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48674
-        '66591868': b'\x40\x0A\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.48110
-        '65824486': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47702
-        '65425880': b'\x3F\x0B\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47514
-        '65291532': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47251
-        '65134129': b'\x9A\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47133
-        '65065687': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47057
-        '64955222': b'\xA0\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.47031
-        '64880848': b'\x9E\x10\x09\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.46986
-        '64081339': b'\xA0\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45885
-        '63387609': b'\xAC\x80\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.45185
-        '37050250': b'\xB5\x9B\xFF\x96\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.23189
-        '36101401': b'\xD0\x9D\xFF\x96\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.22682
-        '35588567': b'\xFA\xB3\xFF\x96\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.22519
-        '35232627': b'\xB9\xB9\xFF\x96\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.22284
-        '34973026': b'\x2F\xBA\xFF\x96\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.22029
-        '33694970': b'\x86\x0C\x01\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.20996
-        '32836111': b'\x86\x0C\x01\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.20557
-        '31960569': b'\xC9\x0C\x01\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.20221
-        '31620962': b'\x51\x0C\x01\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.20066
-        '29783267': b'\x39\x2F\x0E\x97\xF5\x03\x13\xAA\xE8\x03\x40\xF9', #1.0.18559
-    }
-
-    obb_filename = os.path.basename(obb_path)
-    match = re.search(r'main\.(\d+)\.', obb_filename)
-    if not match:
-        print_error(f"Could not parse version code from OBB filename: '{obb_filename}'. Expected format: main.VERSION.package.obb", exit_code=None)
+    try:
+        original_pattern = bytes.fromhex(pattern_hex)
+    except ValueError:
+        print_error(f"Invalid hex pattern provided: {pattern_hex}", exit_code=None)
         return
-    version_code = match.group(1)
-    original_pattern = version_patterns.get(version_code)
-    if not original_pattern:
-        print_error(f"No pattern found for: '{version_code}'.", exit_code=None)
-        return
-    print_info(f"Patching version {version_code}...")
+    print_info(f"Patching {pattern_hex[:8]}...")
     patched_bytes = b'\x1F\x20\x03\xD5'
     patched_pattern = patched_bytes + original_pattern[len(patched_bytes):]
     try:
@@ -746,7 +721,7 @@ def a2ll():
     parser.add_argument("-c", "--commandline", help="Launch arguments for A2")
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
     parser.add_argument("-rn", "--rename", action="store_true", help="Rename the package for parallel installs")
-    parser.add_argument("-p", "--patch", action="store_true", help="Remove entitlement check from libUnreal.so")
+    parser.add_argument("-p", "--patch", help="Byte pattern to patch")
     parser.add_argument("-rm", "--remove", action="store_true", help="Uninstall all versions")
     parser.add_argument("-l", "--logs", action="store_true", help="Pull game logs from the headset")
     parser.add_argument("-ls", "--list", action="store_true", help="List available versions")

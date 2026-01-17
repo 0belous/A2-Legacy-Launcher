@@ -34,11 +34,14 @@ Run old versions of Orion Drift
    
    ```
    These all install the same version:
+   2025-02-01
    a2ll 1.0.25889
    a2ll 25889
    a2ll 41924491
    ```
    
+   **Note that some versions can take up to 5 attempts to launch correctly**
+
 </details>
 
 <details>
@@ -70,10 +73,13 @@ Run old versions of Orion Drift
    
    ```
    These all install the same version:
+   2025-02-01
    a2ll 1.0.25889
    a2ll 25889
    a2ll 41924491
    ```
+
+   **Note that some versions can take up to 5 attempts to launch correctly**
 
 </details>
 
@@ -117,10 +123,13 @@ Run old versions of Orion Drift
    
    ```
    These all install the same version:
+   2025-02-01
    a2ll 1.0.25889
    a2ll 25889
    a2ll 41924491
    ```
+
+   **Note that some versions can take up to 5 attempts to launch correctly**
 
 </details>
 
@@ -147,17 +156,17 @@ Run old versions of Orion Drift
    
    I suggest opening this page on the quest browser and copy pasting this command.
 
+   **Note that some versions can take up to 5 attempts to launch correctly**
+
 </details>
 
 ## Usage
 
 ```
-usage: a2ll [-h] [-v] [-a APK] [-o OBB] [-i INI] [-c COMMANDLINE] [-so SO] [-rn] [-p] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [-r] [download]
-
-A2 Legacy Launcher
+A2 Legacy Launcher 1.2.0 by Obelous
 
 positional arguments:
-  download              Build version to download and install -
+  download              Build version to download and install
 
 options:
   -h, --help            show this help message and exit
@@ -170,7 +179,8 @@ options:
                         Launch arguments for A2
   -so SO, --so SO       Inject a custom .so file
   -rn, --rename         Rename the package for parallel installs
-  -p, --patch           Remove entitlement check from libUnreal.so
+  -p PATCH, --patch PATCH
+                        Byte pattern to patch
   -rm, --remove         Uninstall all versions
   -l, --logs            Pull game logs from the headset
   -ls, --list           List available versions
@@ -183,7 +193,7 @@ options:
 
 #### Extra context:
 
-- `a2ll [version code/CL/1.0.CL]` This automatically downloads a version and uses the correct flags to install it, renaming if possible (see compatibility below).
+- `a2ll [Date/version code/CL/1.0.CL]` This automatically downloads a version and uses the correct flags to install it, renaming if possible.
 
 - `--clearcache` When providing a URL to the APK OBB or INI argument the script downloads and caches the file, to free up storage and delete cached downloads run the script with this argument.
 
