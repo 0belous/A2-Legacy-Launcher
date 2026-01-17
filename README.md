@@ -135,6 +135,8 @@ Run old versions of Orion Drift
 
 <details>
    <summary>Quest instructions</summary>
+
+   Only follow these steps if you dont have access to a Windows/Linux/Mac computer:
    
    <br>
    
