@@ -755,6 +755,10 @@ def a2ll():
             response = requests.get(manifest_url, timeout=10)
             response.raise_for_status()
             manifest = response.json()
+            manifest_version = manifest.get('manifest_version')
+            required_version = ".".join(__version__.split(".")[:2])
+            if manifest_version != required_version:
+                print_error(f"Incompatible Manifest: {manifest_version}, Launcher: {required_version}\nPlease update using pipx upgrade a2-legacy-launcher")
         except Exception as e:
             print_error(f"Failed to download manifest: {e}")
         version_data = find_version_in_manifest(manifest, args.download)
@@ -792,6 +796,10 @@ def a2ll():
             response = requests.get(manifest_url, timeout=10)
             response.raise_for_status()
             manifest = response.json()
+            manifest_version = manifest.get('manifest_version')
+            required_version = ".".join(__version__.split(".")[:2])
+            if manifest_version != required_version:
+                print(Fore.YELLOW + f"Incompatible Manifest: {manifest_version}, Launcher: {required_version}")
         except Exception as e:
             print_error(f"Failed to download manifest: {e}")
         
@@ -853,6 +861,10 @@ def a2ll():
             response = requests.get(manifest_url, timeout=10)
             response.raise_for_status()
             manifest = response.json()
+            manifest_version = manifest.get('manifest_version')
+            required_version = ".".join(__version__.split(".")[:2])
+            if manifest_version != required_version:
+                print_error(f"Incompatible Manifest: {manifest_version}, Launcher: {required_version}")
         except Exception as e:
             print_error(f"Failed to download manifest: {e}")
         versions = manifest.get('versions', [])
