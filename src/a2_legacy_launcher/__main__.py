@@ -26,6 +26,7 @@ import threading
 init(autoreset=True)
 
 __version__ = "1.3.5"
+USER_AGENT = f"LegacyLauncher/{__version__}"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
 try:
@@ -108,7 +109,8 @@ def load_config():
         print_info(f"Creating default configuration at {CONFIG_FILE}")
         default_config = {
             'manifest_url': '(Manifest URL Here)',
-            'autoupdate': True
+            'autoupdate': True,
+            'oculus_token': ''
         }
         with open(CONFIG_FILE, 'w') as f:
             yaml.dump(default_config, f)
@@ -154,46 +156,18 @@ def fetch_manifest(config):
     url = config.get('manifest_url')
     if not url or url == '(Manifest URL Here)': return {}
     try:
-        r = requests.get(url, timeout=10); r.raise_for_status()
+        r = requests.get(url, headers={'User-Agent': USER_AGENT}, timeout=10); r.raise_for_status()
         m = r.json(); mv = m.get('manifest_version')
         rv = ".".join(__version__.split(".")[:2])
         if mv != rv: print(Fore.YELLOW + f"Incompatible Manifest: {mv}, Launcher: {rv}")
         return m
-    except Exception: return {}
+    except Exception as e:
+        print_error(f"Failed to fetch manifest: {e}", exit_code=None)
+        return {}
 
 def get_launcher_pkgs(device_id, base_package):
     out = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"], True)
     return [l.replace("package:", "").strip() for l in out.splitlines() if l.strip().endswith(base_package) or "com.LegacyLauncher." in l]
-
-def apply_manifest_flags(args, flags_str):
-    if not flags_str:
-        return
-    parsed_flags = shlex.split(flags_str)
-    i = 0
-    while i < len(parsed_flags):
-        flag = parsed_flags[i]
-        if flag in ("-p", "--patch"):
-            if args.patch is None and i + 1 < len(parsed_flags):
-                args.patch = parsed_flags[i+1]
-                i += 1
-        elif flag == "--rename":
-            args.rename = True
-        elif flag == "--strip":
-            args.strip = True
-        elif flag in ("-i", "--ini"):
-            if args.ini is None and i + 1 < len(parsed_flags):
-                args.ini = parsed_flags[i+1]
-                i += 1
-        elif flag in ("-m", "--map"):
-            if i + 1 < len(parsed_flags):
-                if args.map is None: args.map = []
-                args.map.append(parsed_flags[i+1])
-                i += 1
-        elif flag == "--commandline":
-            if args.commandline is None and i + 1 < len(parsed_flags):
-                args.commandline = parsed_flags[i+1]
-                i += 1
-        i += 1
 
 def check_for_updates():
     def run_update():
@@ -215,7 +189,7 @@ def check_for_updates():
             return
     try:
         pypi_url = "https://pypi.org/pypi/a2-legacy-Launcher/json"
-        response = requests.get(pypi_url, timeout=3)
+        response = requests.get(pypi_url, headers={'User-Agent': USER_AGENT}, timeout=3)
         response.raise_for_status()
         latest_version_str = response.json()["info"]["version"] 
         def parse_version(v):
@@ -284,19 +258,37 @@ def clean_temp_dir():
     os.makedirs(TEMP_DIR)
 
 def download(url, filename):
-    print_info(f"Downloading {os.path.basename(filename)} from {url}...")
-    try:
-        obj = SmartDL(url, dest=filename, progress_bar=True)
-        obj.start()
-        if obj.isSuccessful():
-            return True
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            parsed_url = urlparse(url)
+            is_oculus = False
+            if parsed_url.scheme == 'https' and parsed_url.netloc == 'securecdn.oculus.com':
+                is_oculus = True
+                config = load_config()
+                token = config.get('oculus_token')
+                if token:
+                    query = parse_qs(parsed_url.query)
+                    if 'access_token' not in query:
+                        separator = '&' if parsed_url.query else '?'
+                        url += f"{separator}access_token={token}"
+            print_info(f"Downloading {os.path.basename(filename)} from {url}... (Attempt {attempt + 1}/{max_retries})")
+            obj = SmartDL(url, dest=filename, progress_bar=True, threads=1, timeout=20)
+            obj.start()
+            if obj.isSuccessful():
+                return True
+            else:
+                errors = obj.get_errors()
+                print_error(f"Failed to download file: {errors}", exit_code=None)
+        except Exception as e:
+            print_error(f"Failed to download file: {e}", exit_code=None)
+        if attempt < max_retries - 1:
+            print_info("Retrying in 2 seconds...")
+            time.sleep(2)
         else:
-            print_error(f"Failed to download file: {obj.get_errors()}")
             return False
-
-    except Exception as e:
-        print_error(f"Failed to download file: {e}")
-        return False
+            
+    return False
 
 def check_and_install_java():
     if shutil.which("java"):
@@ -518,7 +510,7 @@ def process_apk(apk_path, args, base_package, effective_package_name):
         with open(ue_cmdline_path, 'w') as f:
             f.write(args.commandline)
     if args.so:
-        so_path = get_path_from_input(args.so, "so")
+        so_path = get_path_from_input(args.so, "so", getattr(args, 'local_archive', None))
         if so_path:
             inject_so(DECOMPILED_DIR, so_path)
     if args.patch:
@@ -539,14 +531,12 @@ def process_apk(apk_path, args, base_package, effective_package_name):
     print_success("APK processing complete.")
 
 def install_modded_apk(device_id, package_name):
+    subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], capture_output=True)
     print_info("Installing modified APK...")
-    proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "-r", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
+    proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
     if "Success" in proc.stdout:
-        return False
-        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], capture_output=True)
-        proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
-        if "Success" in proc.stdout:
-            return True
+        return True
+    
     print_error(f"Installation failed: {proc.stdout}\n{proc.stderr}")
     return False
 
@@ -590,6 +580,27 @@ def push_ini(device_id, ini_file, package_name, app_path):
     run_command([ADB_PATH, "-s", device_id, "shell", shell_command])
     print_success("INI file pushed successfully.")
 
+def create_map_ini(map_name):
+    real_map = map_name.split('|')[1] if '|' in map_name else map_name
+    ini_content = f"[/Script/EngineSettings.GameMapsSettings]\nGameDefaultMap={real_map}\n\n"
+    ini_path = os.path.join(TEMP_DIR, "Engine.ini")
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    with open(ini_path, "w") as f:
+        f.write(ini_content)
+    return ini_path
+
+def prompt_user_selection(options, prompt_text="Select an option:"):
+    if not options: return None
+    for i, opt in enumerate(options):
+        print(f"  {i+1}) {opt}")
+    while True:
+        try:
+            choice = int(input(f"{prompt_text} (1-{len(options)}): ")) - 1
+            if 0 <= choice < len(options):
+                return choice
+        except (ValueError, KeyboardInterrupt):
+            pass
+
 def get_cache_index():
     if not os.path.exists(CACHE_INDEX):
         return {}
@@ -603,32 +614,72 @@ def update_cache_index(index):
     with open(CACHE_INDEX, 'w') as f:
         json.dump(index, f, indent=4)
 
-def get_path_from_input(input_str, file_type):
+def get_path_from_input(input_str, file_type, archive_path=None):
     if not input_str:
         return None
+    if input_str.startswith("archive:/"):
+        if not archive_path:
+            print_error(f"Cannot resolve {input_str}: --archive was not provided.")
+            return None
+        internal_path = input_str[9:].lstrip('/')
+        file_hash = hashlib.sha256(f"{archive_path}:{internal_path}".encode()).hexdigest()
+        _, ext = os.path.splitext(internal_path)
+        if not ext: ext = f".{file_type}"
+        target_filename = f"{file_hash}{ext}"
+        target_path = os.path.join(CACHE_DIR, target_filename)
+        if os.path.exists(target_path):
+             print_info(f"Using cached extracted file: {target_path}")
+             return target_path
+        try:
+             print_info(f"Extracting {internal_path} from archive...")
+             with zipfile.ZipFile(archive_path, 'r') as zf:
+                 with zf.open(internal_path) as source, open(target_path, "wb") as target:
+                     shutil.copyfileobj(source, target)
+             return target_path
+        except KeyError:
+             print_error(f"File '{internal_path}' not found inside the archive.")
+             return None
+        except Exception as e:
+             print_error(f"Failed to extract file: {e}")
+             return None
+
     if input_str.startswith(('http://', 'https://')):
         url = input_str
         cache_index = get_cache_index()
         filename = None
+        parsed_url = urlparse(url)
+        is_oculus_cdn = parsed_url.scheme == 'https' and parsed_url.netloc == 'securecdn.oculus.com'
         if file_type == 'apk':
             url_hash = hashlib.sha256(url.encode()).hexdigest()
             filename = f"{url_hash}.apk"
         else:
-            try:
-                parsed_url = urlparse(url)
-                query_params = parse_qs(parsed_url.query)
-                path_from_query = query_params.get('path', [None])[0]
-                if path_from_query:
-                    potential_filename = os.path.basename(unquote(path_from_query))
-                    if '.' in potential_filename:
-                        filename = potential_filename
-                if not filename:
-                    path_segment = unquote(parsed_url.path)
-                    potential_filename = os.path.basename(path_segment)
-                    if '.' in potential_filename:
-                        filename = potential_filename
-            except Exception as e:
-                 print_info(f"Could not parse filename from URL, falling back to hash. Error: {e}")
+            query_params = parse_qs(parsed_url.query)
+            path_from_query = query_params.get('path', [None])[0]
+            if path_from_query:
+                potential_filename = os.path.basename(unquote(path_from_query))
+                if '.' in potential_filename:
+                    filename = potential_filename
+            if not filename:
+                path_segment = unquote(parsed_url.path)
+                potential_filename = os.path.basename(path_segment)
+                if '.' in potential_filename:
+                    filename = potential_filename
+            if is_oculus_cdn and file_type == 'obb':
+                config = load_config()
+                token = config.get('oculus_token')
+                head_url = url
+                if token:
+                        query = parse_qs(parsed_url.query)
+                        if 'access_token' not in query:
+                            separator = '&' if parsed_url.query else '?'
+                            head_url += f"{separator}access_token={token}"
+                r = requests.head(head_url, allow_redirects=True, timeout=10, headers={'User-Agent': USER_AGENT})
+                cd = r.headers.get('content-disposition')
+                if cd:
+                    fname = re.findall(r'filename=([^;]+)', cd)
+                    if fname:
+                        filename = fname[0].strip()
+                        print_info(f"Resolved OBB filename: {filename}")
             if not filename:
                 url_hash = hashlib.sha256(url.encode()).hexdigest()
                 filename = f"{url_hash}.{file_type}"
@@ -719,6 +770,7 @@ def a2ll():
     )
     parser.add_argument('download', nargs='?', default=None, help="Build version to download and install -")
     parser.add_argument("-v", "--version", action="version", version=f"Legacy Launcher {__version__}")
+    parser.add_argument("--archive", help="Path/URL to a zip archive (use archive:/path/inside.apk)")
     parser.add_argument("-a", "--apk", help="Path/URL to an APK file")
     parser.add_argument("-o", "--obb", help="Path/URL to an OBB file")
     parser.add_argument("-i", "--ini", help="Path/URL for Engine.ini")
@@ -727,8 +779,7 @@ def a2ll():
     parser.add_argument("-c", "--commandline", help="Launch arguments for UE")
     parser.add_argument("--no-commandline", action="store_false", dest="commandline", help=argparse.SUPPRESS)
     parser.add_argument("-so", "--so", help="Inject a custom .so file")
-    parser.add_argument("-rn", "--rename", action="store_true", dest="rename", default=None, help="Rename the package for parallel installs")
-    parser.add_argument("--no-rename", action="store_false", dest="rename", help=argparse.SUPPRESS)
+    parser.add_argument("-rn", "--rename", help="Rename the package to com.LegacyLauncher.<VALUE>")
     parser.add_argument("-p", "--patch", help="Byte pattern to patch")
     parser.add_argument("--no-patch", action="store_false", dest="patch", help=argparse.SUPPRESS)
     parser.add_argument("-rm", "--remove", action="store_true", dest="remove", default=None, help="Uninstall all versions")
@@ -748,6 +799,8 @@ def a2ll():
     parser.add_argument("-r", "--restore", action="store_true", dest="restore", default=None, help="Restore to the latest version")
     parser.add_argument("--no-restore", action="store_false", dest="restore", help=argparse.SUPPRESS)
     parser.add_argument("--set-manifest", dest="set_manifest", help="Set the manifest URL in the config")
+    parser.add_argument("-sw", "--switch-map", action="store_true", dest="switch_version", help="Change which map to load")
+    parser.add_argument("--message")
     args = parser.parse_args()
     print(Fore.LIGHTBLUE_EX + BANNER)
     
@@ -759,9 +812,16 @@ def a2ll():
             yaml.dump(config, f)
         print_success(f"Manifest updated: {args.set_manifest}")
         return
+    local_archive = None
+    if args.archive:
+        local_archive = get_path_from_input(args.archive, "zip")
+        if not local_archive:
+            print_error("Failed to process archive argument.")
+            return
+        args.local_archive = local_archive
     manifest = fetch_manifest(config)
     
-    if not manifest:
+    if not manifest and (not config.get('manifest_url') or config.get('manifest_url') == '(Manifest URL Here)'):
         print(Fore.YELLOW + f"Warning: No manifest configured at {CONFIG_FILE} Automatic download and configuration is unavailable.")
 
     BASE_PACKAGE = manifest.get('package_name', 'com.example.app')
@@ -788,12 +848,13 @@ def a2ll():
         if not version_data:
             print_error(f"Version '{args.download}' not found in the manifest.")
         
-        effective_new_pkg = f"com.LegacyLauncher.V{version_data.get('version_number', 'EXT')}"
-        
         print_success(f"Installing: {version_data['version']}")
         flags_str = version_data.get('flags', '')
         print_info(f"Using flags: {flags_str}")
-        manifest_args = parser.parse_args(shlex.split(flags_str))
+        manifest_tokens = shlex.split(flags_str)
+        if args.rename:
+            manifest_tokens = [t for t in manifest_tokens if t not in ("-rn", "--rename")]
+        manifest_args, _ = parser.parse_known_args(manifest_tokens)
         if args.ini is None:
             args.ini = manifest_args.ini or version_data.get('ini_url')
         if args.map is None:
@@ -813,9 +874,10 @@ def a2ll():
 
         args.apk = version_data.get('apk_url')
         args.obb = version_data.get('obb_url')
-    else:
-        effective_new_pkg = f"com.LegacyLauncher.{APP_NAME}"
 
+    if args.message:
+        print(Fore.RED + args.message)
+    
     if args.list:
         versions = manifest.get('versions', [])
         if not versions:
@@ -836,7 +898,40 @@ def a2ll():
     if not os.path.exists(KEYSTORE_FILE):
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
     device_id = get_connected_device()
-    effective_package_name = effective_new_pkg if args.rename else BASE_PACKAGE
+
+    if args.switch_version:
+        if not manifest: print_error("Manifest required.")
+        pkgs = set(get_launcher_pkgs(device_id, BASE_PACKAGE))
+        candidates = []
+        for v in manifest.get('versions', []):
+            v_flags = v.get('flags', '')
+            v_args, _ = parser.parse_known_args(shlex.split(v_flags))
+            if v_args.rename:
+                pkg = f"com.LegacyLauncher.{v_args.rename}"
+            else:
+                pkg = BASE_PACKAGE
+            if pkg not in pkgs: continue
+            if v_args.map and len(v_args.map) > 1:
+                candidates.append((v['version'], pkg, v_args.map))
+        if not candidates: print_error("No configurable versions found.")
+        
+        selected_candidate = candidates[0]
+        if len(candidates) > 1:
+            print(Fore.LIGHTBLUE_EX + "\nSelect version:")
+            idx = prompt_user_selection([c[0] for c in candidates], "Choice")
+            selected_candidate = candidates[idx]
+            
+        ver, pkg, maps = selected_candidate
+        
+        print(Fore.LIGHTBLUE_EX + "\nSelect map:")
+        map_labels = [m.split('|')[0] for m in maps]
+        map_idx = prompt_user_selection(map_labels, "Choice")
+        
+        ini_path = create_map_ini(maps[map_idx])
+        push_ini(device_id, ini_path, pkg, APP_PATH)
+        return
+
+    effective_package_name = f"com.LegacyLauncher.{args.rename}" if args.rename else BASE_PACKAGE
     action_performed = False
     if args.remove:
         action_performed = True
@@ -856,8 +951,8 @@ def a2ll():
         if not versions: print_error("No versions found.")
         latest = max(versions, key=lambda v: v.get('version_code') or 0)
         print_success(f"Restoring to latest: {latest.get('version')}")
-        apk_path = get_path_from_input(latest.get('apk_url'), "apk")
-        obb_path = get_path_from_input(latest.get('obb_url'), "obb")
+        apk_path = get_path_from_input(latest.get('apk_url'), "apk", local_archive)
+        obb_path = get_path_from_input(latest.get('obb_url'), "obb", local_archive)
         subprocess.run([ADB_PATH, "-s", device_id, "uninstall", BASE_PACKAGE], capture_output=True)
         obb_thread = threading.Thread(target=upload_obb, args=(device_id, obb_path, BASE_PACKAGE, False, BASE_PACKAGE))
         obb_thread.start()
@@ -873,16 +968,15 @@ def a2ll():
                 remote_log = f"/sdcard/Android/data/{pkg}/files/UnrealGame/{APP_PATH}/Saved/Logs/{APP_NAME}.log"
                 local_log = f"{APP_NAME}_{pkg}.log"
                 ts = 0
-                try:
-                    res = subprocess.run([ADB_PATH, "-s", device_id, "shell", "stat", "-c", "%Y", remote_log], capture_output=True, text=True)
-                    if res.returncode == 0: ts = int(res.stdout.strip())
-                except: pass
 
-                if ts > 0 or subprocess.run([ADB_PATH, "-s", device_id, "shell", "ls", remote_log], capture_output=True).returncode == 0:
+                check_cmd = [ADB_PATH, "-s", device_id, "shell", f"if [ -f {remote_log} ]; then stat -c %Y {remote_log}; fi"]
+                res = subprocess.run(check_cmd, capture_output=True, text=True)
+                if res.returncode == 0 and res.stdout.strip().isdigit():
+                    ts = int(res.stdout.strip())
                     run_command([ADB_PATH, "-s", device_id, "pull", remote_log, local_log], True)
                     if os.path.exists(local_log):
-                        pulled_logs.append((local_log, ts if ts > 0 else os.path.getmtime(local_log)))
-            
+                        pulled_logs.append((local_log, ts or os.path.getmtime(local_log)))
+
             if not pulled_logs:
                 print_error("No logs found.", None)
             else:
@@ -917,12 +1011,14 @@ def a2ll():
     obb_thread = None
     if args.apk:
         action_performed = True
-        apk_path = get_path_from_input(args.apk, "apk")
+        apk_path = get_path_from_input(args.apk, "apk", local_archive)
         if not apk_path.lower().endswith(".apk"):
             print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
     if args.obb:
         action_performed = True
-        obb_path = get_path_from_input(args.obb, "obb")
+        obb_path = get_path_from_input(args.obb, "obb", local_archive)
+        if not obb_path:
+             print_error("Failed to process OBB file.")
         if not obb_path.lower().endswith(".obb"):
             print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{obb_path}'")
         obb_thread = threading.Thread(target=upload_obb, args=(device_id, obb_path, effective_package_name, args.rename, BASE_PACKAGE))
@@ -938,34 +1034,13 @@ def a2ll():
             upload_obb(device_id, obb_path, effective_package_name, args.rename, BASE_PACKAGE)
 
     if args.map:
-        selected_map = None
+        selected_map = args.map[0]
         if len(args.map) > 1:
             print(Fore.LIGHTBLUE_EX + "\nMultiple maps available for this version:")
-            for idx, m_opt in enumerate(args.map):
-                label = m_opt.split('|')[0] if '|' in m_opt else m_opt
-                print(f"  {idx + 1}) {label}")
-            while True:
-                try:
-                    choice = int(input(f"\nSelect a map (1-{len(args.map)}): ")) - 1
-                    if 0 <= choice < len(args.map):
-                        selected_map = args.map[choice]
-                        break
-                except (ValueError, KeyboardInterrupt):
-                    pass
-                print_error("Invalid selection.", exit_code=None)
-        else:
-            selected_map = args.map[0]
-        if '|' in selected_map:
-            selected_map = selected_map.split('|')[1]
-        dynamic_ini_content = (
-            "[/Script/EngineSettings.GameMapsSettings]\n"
-            f"GameDefaultMap={selected_map}\n\n"
-        )
-        dynamic_ini_path = os.path.join(TEMP_DIR, "Engine.ini")
-        os.makedirs(TEMP_DIR, exist_ok=True)
-        with open(dynamic_ini_path, "w") as f:
-            f.write(dynamic_ini_content)
-        args.ini = dynamic_ini_path
+            idx = prompt_user_selection([m.split('|')[0] if '|' in m else m for m in args.map], "Select a map")
+            selected_map = args.map[idx]
+            
+        args.ini = create_map_ini(selected_map)
 
     if args.ini:
         action_performed = True
