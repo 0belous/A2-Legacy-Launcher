@@ -25,7 +25,7 @@ import threading
 
 init(autoreset=True)
 
-__version__ = "1.3.5"
+__version__ = "1.3.6"
 USER_AGENT = f"LegacyLauncher/{__version__}"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
