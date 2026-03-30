@@ -1,54 +1,95 @@
-name: Publish to PyPI
+name: Build and Release Executables
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - 'src/a2_legacy_launcher/__main__.py'
+      - 'src/ue_legacy_launcher/**/*.py'
 
 jobs:
-  build-publish:
-    runs-on: ubuntu-latest
+  build_binaries:
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
-
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: uell-linux
+            separator: ":"
+          - os: windows-latest
+            artifact_name: uell-windows.exe
+            separator: ";"
+          - os: macos-latest
+            artifact_name: uell-macos
+            separator: ":"
+            
+    outputs:
+      version_tag: ${{ steps.get_tag.outputs.latest_tag }}
+      
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install build tools
+      - name: Install build dependencies
         run: |
-          pip install --upgrade pip
-          pip install setuptools build bump-my-version twine pkginfo
+          python -m pip install --upgrade pip
+          pip install setuptools bump-my-version pyinstaller requests colorama pySmartDL pyyaml
+          pip install .
 
-      - name: Configure Git
+      - name: Automate Version Bump (Ubuntu Only)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
+          bump-my-version bump patch
+          git push origin main --follow-tags
 
-      - name: Bump patch version
-        run: bump-my-version bump patch
+      - name: Export latest tag
+        if: matrix.os == 'ubuntu-latest'
+        id: get_tag
+        run: |
+          git fetch --tags
+          echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
 
-      - name: Push changes
-        run: git push --follow-tags
+      - name: Build Executable with PyInstaller
+        run: |
+          pyinstaller --onefile --name ${{ matrix.artifact_name }} --paths src --add-data "src/ue_legacy_launcher/*.jar${{ matrix.separator }}ue_legacy_launcher" --add-data "src/ue_legacy_launcher/*.keystore${{ matrix.separator }}ue_legacy_launcher" --add-data "src/ue_legacy_launcher/aapt2-ARM64${{ matrix.separator }}ue_legacy_launcher" run_cli.py
 
-      - name: Clean previous builds
-        run: rm -rf dist build *.egg-info
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
 
-      - name: Build package
-        run: python -m build
-
-      - name: Check metadata
-        run: twine check dist/*
-
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+  publish_release:
+    needs: build_binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build_binaries.outputs.version_tag }}
+          make_latest: true
+          files: |
+            dist/uell-windows.exe
+            dist/uell-linux
+            dist/uell-macos

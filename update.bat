@@ -1,2 +1,2 @@
-pipx uninstall a2-legacy-launcher
-pipx install a2-legacy-launcher
+@echo off
+start cmd /k "echo You are running legacy launcher 1.3 which is installed and managed via pipx.& echo This system is now deprecated, to update to the latest version please check https://github.com/0belous/UE-Legacy-Launcher. & echo To keep using an old version and stop seeing this message disable autoupdate in your config.yml & pause"
