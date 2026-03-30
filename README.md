@@ -2,7 +2,7 @@
 
 An integrated version manager/downgrader for Oculus VR games built with Unreal Engine.
 
-[Repo Mirror](https://git.obelous.dev/obelous/A2-Legacy-Launcher)
+[Repo Mirror](https://git.obelous.dev/obelous/UE-Legacy-Launcher)
 
 ## Dependencies
 - Python 3
@@ -17,14 +17,21 @@ An integrated version manager/downgrader for Oculus VR games built with Unreal E
 ## Usage
 
 ```
-UE Legacy Launcher
+usage: uell.exe [-h] [-v] [-y] [--archive ARCHIVE] [-a APK] [-o OBB] [-i INI] [-m MAP] [-c COMMANDLINE] [-so SO] [-rn RENAME] [-p PATCH] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [-r]
+                [--set-manifest SET_MANIFEST] [--adb ...] [-sw] [--stay] [--message MESSAGE]
+                [download ...]
+
+Legacy Launcher 1.4
 
 positional arguments:
-  download              Build version to download and install
+  download              Build version to download and install -
 
 options:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
+  -y, --yes, --auto-confirm
+                        Automatically confirm prompts
+  --archive ARCHIVE     Path/URL to a zip archive (use archive:/path/inside.apk)
   -a APK, --apk APK     Path/URL to an APK file
   -o OBB, --obb OBB     Path/URL to an OBB file
   -i INI, --ini INI     Path/URL for Engine.ini
@@ -32,7 +39,8 @@ options:
   -c COMMANDLINE, --commandline COMMANDLINE
                         Launch arguments for UE
   -so SO, --so SO       Inject a custom .so file
-  -rn, --rename         Rename the package for parallel installs
+  -rn RENAME, --rename RENAME
+                        Rename the package to com.LegacyLauncher.<VALUE>
   -p PATCH, --patch PATCH
                         Byte pattern to patch
   -rm, --remove         Uninstall all versions
@@ -43,6 +51,12 @@ options:
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
   -r, --restore         Restore to the latest version
+  --set-manifest SET_MANIFEST
+                        Set the manifest URL in the config
+  --adb ...             Run a custom adb command using bundled adb (example: --adb devices)
+  -sw, --switch-map     Change which map to load
+  --stay                Keep the window open until Enter is pressed
+  --message MESSAGE
 ```
 
 #### Extra context:
@@ -67,6 +81,7 @@ The config.yml file located at `~/.ue-legacy-launcher/config.yml` has these sett
 
 ```yml
 autoupdate: true
+logging_mode: default / info
 manifest_url: (Manifest URL Here)
 ```
 
