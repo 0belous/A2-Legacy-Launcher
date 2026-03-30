@@ -4,9 +4,6 @@ An integrated version manager/downgrader for Oculus VR games built with Unreal E
 
 [Repo Mirror](https://git.obelous.dev/obelous/UE-Legacy-Launcher)
 
-## Dependencies
-- Python 3
-
 ## Get started
 
 1. Navigate to releases
