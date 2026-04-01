@@ -250,18 +250,7 @@ def upload_obb(device_id, obb_file, effective_package_name, is_renamed, original
         final_obb_name = os.path.basename(obb_file)
     destination_dir = f"/sdcard/Android/obb/{effective_package_name}/"
     destination_path = destination_dir + final_obb_name
-    try:
-        local_size = os.path.getsize(obb_file)
-        subprocess.run([ADB_PATH, "-s", device_id, "shell", f"mkdir -p {destination_dir}"], capture_output=True)
-        res = subprocess.run([ADB_PATH, "-s", device_id, "shell", f"stat -c %s {destination_path}"], capture_output=True, text=True)
-        if res.returncode == 0 and res.stdout.strip().isdigit():
-            remote_size = int(res.stdout.strip())
-            if remote_size == local_size:
-                set_obb_upload_progress(100)
-                print_success("OBB already exists. Skipping OBB upload.")
-                return
-    except Exception as e:
-        print_info(f"Error checking OBB status: {e}. Proceeding with upload.")
+    subprocess.run([ADB_PATH, "-s", device_id, "shell", f"mkdir -p {destination_dir}"], capture_output=True)
 
     print_info(f"Uploading OBB...")
     set_obb_upload_progress(30)

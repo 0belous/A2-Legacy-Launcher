@@ -25,7 +25,7 @@ a2ll = "ue_legacy_launcher.__main__:main"
 uell = "ue_legacy_launcher.__main__:main"
 
 [tool.setuptools.package-data]
-ue_legacy_launcher = ["*.jar", "*.keystore", "aapt2-ARM64"]
+ue_legacy_launcher = ["*.keystore"]
 
 
 [tool.setuptools]

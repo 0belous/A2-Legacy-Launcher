@@ -19,12 +19,19 @@ jobs:
           - os: ubuntu-latest
             artifact_name: uell-linux
             separator: ":"
+            is_termux: "0"
           - os: windows-latest
             artifact_name: uell-windows.exe
             separator: ";"
+            is_termux: "0"
           - os: macos-latest
             artifact_name: uell-macos
             separator: ":"
+            is_termux: "0"
+          - os: ubuntu-24.04-arm
+            artifact_name: uell-termux-arm64
+            separator: ":"
+            is_termux: "1"
             
     outputs:
       version_tag: ${{ steps.get_tag.outputs.latest_tag }}
@@ -64,8 +71,10 @@ jobs:
           echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
 
       - name: Build Executable with PyInstaller
+        env:
+          TERMUX_VERSION: ${{ matrix.is_termux == '1' && 'ci' || '' }}
         run: |
-          pyinstaller --onefile --name ${{ matrix.artifact_name }} --paths src --add-data "src/ue_legacy_launcher/*.jar${{ matrix.separator }}ue_legacy_launcher" --add-data "src/ue_legacy_launcher/*.keystore${{ matrix.separator }}ue_legacy_launcher" --add-data "src/ue_legacy_launcher/aapt2-ARM64${{ matrix.separator }}ue_legacy_launcher" run_cli.py
+          pyinstaller --onefile --name ${{ matrix.artifact_name }} --paths src --add-data "src/ue_legacy_launcher/*.keystore${{ matrix.separator }}ue_legacy_launcher" run_cli.py
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -93,3 +102,4 @@ jobs:
             dist/uell-windows.exe
             dist/uell-linux
             dist/uell-macos
+            dist/uell-termux-arm64

@@ -22,6 +22,7 @@ from .config import __version__
 
 CACHE_INDEX_LOCK = threading.Lock()
 PROGRESS_LOCK = threading.Lock()
+DOWNLOAD_INTERRUPT_EVENT = threading.Event()
 
 LOGGING_MODE = "default"
 PROGRESS_VISIBLE = False
@@ -52,14 +53,19 @@ def _configure_ssl():
         os.environ["SSL_CERT_FILE"] = certifi.where()
         os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
+def request_interrupt():
+    DOWNLOAD_INTERRUPT_EVENT.set()
+
+def is_interrupt_requested():
+    return DOWNLOAD_INTERRUPT_EVENT.is_set()
+
 def _prepare_subprocess_env(env=None, for_sdk_command=False):
     """Prepare environment for subprocess execution, handling readline conflicts on Linux."""
     if env is None:
         env = os.environ.copy()
     else:
-        env = dict(env)  # Make a copy to avoid modifying the input
-    
-    # On Linux, unset LD_LIBRARY_PATH for SDK commands to avoid readline library conflicts
+        env = dict(env)
+
     if not is_windows and for_sdk_command:
         env.pop('LD_LIBRARY_PATH', None)
         env.pop('LD_PRELOAD', None)
@@ -175,7 +181,6 @@ def print_error(message, exit_code=1):
 
 def run_command(command, suppress_output=False, env=None):
     try:
-        # SDK commands on Linux need special environment handling to avoid readline conflicts
         is_sdk_cmd = len(command) > 0 and any(sdk_tool in command[0] for sdk_tool in [SDK_MANAGER_PATH, ADB_PATH, ZIPALIGN_PATH, APKSIGNER_PATH, "sdkmanager", "adb", "zipalign", "apksigner"])
         prepared_env = _prepare_subprocess_env(env, for_sdk_command=is_sdk_cmd)
         
@@ -201,7 +206,6 @@ def run_command(command, suppress_output=False, env=None):
 
 def run_interactive_command(command, env=None):
     try:
-        # SDK commands on Linux need special environment handling to avoid readline conflicts
         is_sdk_cmd = len(command) > 0 and any(sdk_tool in command[0] for sdk_tool in [SDK_MANAGER_PATH, ADB_PATH, ZIPALIGN_PATH, APKSIGNER_PATH, "sdkmanager", "adb", "zipalign", "apksigner"])
         prepared_env = _prepare_subprocess_env(env, for_sdk_command=is_sdk_cmd)
         
@@ -344,12 +348,20 @@ def clean_temp_dir():
         shutil.rmtree(TEMP_DIR)
     os.makedirs(TEMP_DIR)
 
-def download(url, filename, file_type=None):
-    # Configure SSL certificate verification for all HTTP libraries
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+def download(url, filename, file_type=None, expected_sha256=None):
     _configure_ssl()
     
     max_retries = 3
     for attempt in range(max_retries):
+        if is_interrupt_requested():
+            return False
         try:
             parsed_url = urlparse(url)
             is_oculus = False
@@ -371,6 +383,17 @@ def download(url, filename, file_type=None):
             obj.start(blocking=False)
             
             while not obj.isFinished():
+                if is_interrupt_requested():
+                    try:
+                        obj.stop()
+                    except Exception:
+                        pass
+                    try:
+                        if os.path.exists(filename):
+                            os.remove(filename)
+                    except OSError:
+                        pass
+                    return False
                 speed = obj.get_speed(human=True)
                 downloaded = obj.get_dl_size()
                 total = obj.get_final_filesize()
@@ -392,6 +415,13 @@ def download(url, filename, file_type=None):
                 time.sleep(0.5)
 
             if obj.isSuccessful():
+                if expected_sha256:
+                    actual_sha256 = _sha256_file(filename)
+                    expected = expected_sha256.lower()
+                    if actual_sha256 != expected:
+                        raise Exception(
+                            f"Checksum mismatch for {os.path.basename(filename)}: expected {expected}, got {actual_sha256}"
+                        )
                 total = obj.get_final_filesize()
                 if file_type in ("apk", "obb"):
                     mark_download_complete(file_type)
@@ -406,8 +436,12 @@ def download(url, filename, file_type=None):
             else:
                 raise Exception(f"pySmartDL failed: {obj.get_errors()}")
         except Exception as e:
+            if is_interrupt_requested():
+                return False
             print_error(f"Failed to download file: {e}", exit_code=None)
         if attempt < max_retries - 1:
+            if is_interrupt_requested():
+                return False
             print_info("Retrying in 2 seconds...")
             time.sleep(2)
         else:
@@ -472,6 +506,41 @@ def setup_sdk():
     run_interactive_command([SDK_MANAGER_PATH, f"--install", f"build-tools;{BUILD_TOOLS_VERSION}"])
     
     print_success("Android SDK setup complete.")
+
+def ensure_runtime_tools():
+    apktool_ok = False
+    if os.path.exists(APKTOOL_JAR):
+        try:
+            apktool_ok = _sha256_file(APKTOOL_JAR) == APKTOOL_SHA256
+            if not apktool_ok:
+                print_info("Existing apktool checksum mismatch. Re-downloading...")
+                os.remove(APKTOOL_JAR)
+        except Exception:
+            apktool_ok = False
+
+    if not apktool_ok:
+        if not download(APKTOOL_DOWNLOAD_URL, APKTOOL_JAR, expected_sha256=APKTOOL_SHA256):
+            print_error(f"Failed to download apktool from {APKTOOL_DOWNLOAD_URL}")
+
+    aapt2_ok = True
+    if IS_TERMUX:
+        aapt2_ok = False
+        if os.path.exists(AAPT2_PATH):
+            try:
+                aapt2_ok = _sha256_file(AAPT2_PATH) == AAPT2_TERMUX_SHA256
+                if not aapt2_ok:
+                    print_info("Existing aapt2 checksum mismatch. Re-downloading...")
+                    os.remove(AAPT2_PATH)
+            except Exception:
+                aapt2_ok = False
+
+    if IS_TERMUX and not aapt2_ok:
+        if not download(AAPT2_TERMUX_URL, AAPT2_PATH, expected_sha256=AAPT2_TERMUX_SHA256):
+            print_error(f"Failed to download aapt2 from {AAPT2_TERMUX_URL}")
+        try:
+            os.chmod(AAPT2_PATH, 0o755)
+        except Exception:
+            pass
 
 def get_connected_device():
     print_info("Looking for connected devices...")

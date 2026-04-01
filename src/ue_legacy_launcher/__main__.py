@@ -21,7 +21,7 @@ from .utils import (
     check_and_install_java, setup_sdk, get_connected_device, prompt_user_selection,
     get_cache_index, update_cache_index, get_path_from_input, find_pattern,
     set_logging_mode, is_info_mode, begin_install_progress, finish_install_progress,
-    print_status, _configure_ssl
+    print_status, _configure_ssl, ensure_runtime_tools, request_interrupt
 )
 from .modify import (
     modify_manifest, rename_package, inject_so, process_apk, install_modded_apk,
@@ -34,8 +34,9 @@ _interrupt_event = threading.Event()
 
 def _signal_handler(signum, frame):
     _interrupt_event.set()
+    request_interrupt()
     print(Fore.RED + "\n[!] Keyboard Interrupt.")
-    sys.exit(0)
+    os._exit(130)
 
 signal.signal(signal.SIGINT, _signal_handler)
 
@@ -242,6 +243,7 @@ def uell():
         check_and_install_java()
         if not os.path.exists(SDK_MANAGER_PATH):
             setup_sdk()
+    ensure_runtime_tools()
 
     if args.adb is not None:
         adb_args = [arg for arg in args.adb if arg]
@@ -251,8 +253,6 @@ def uell():
         run_interactive_command([ADB_PATH] + adb_args)
         return
 
-    if not os.path.exists(APKTOOL_JAR):
-        print_error(f"Packaged component {APKTOOL_JAR} not found.")
     if not os.path.exists(KEYSTORE_FILE):
         print_error(f"Packaged component {KEYSTORE_FILE} not found.")
     device_id = get_connected_device()
@@ -343,7 +343,7 @@ def uell():
                     upload_obb(device_id, obb_path, effective_package_name, task_args.rename, BASE_PACKAGE)
         finally:
             if obb_executor:
-                obb_executor.shutdown(wait=True)
+                obb_executor.shutdown(wait=not _interrupt_event.is_set())
             if has_apk or has_obb:
                 finish_install_progress()
 
@@ -409,7 +409,7 @@ def uell():
             run_command([ADB_PATH, "-s", device_id, "install", "-r", apk_path])
             obb_future.result()
         finally:
-            obb_executor.shutdown(wait=True)
+            obb_executor.shutdown(wait=not _interrupt_event.is_set())
             finish_install_progress()
 
     try:
