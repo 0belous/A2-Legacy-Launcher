@@ -292,7 +292,7 @@ def get_launcher_pkgs(device_id, base_package):
     out = run_command([ADB_PATH, "-s", device_id, "shell", "pm", "list", "packages"], True)
     return [l.replace("package:", "").strip() for l in out.splitlines() if l.strip().endswith(base_package) or "com.LegacyLauncher." in l]
 
-def check_for_updates():
+def check_for_updates(force=False):
     config = load_config()
     if not config.get('autoupdate', True):
         return
@@ -308,7 +308,8 @@ def check_for_updates():
         def parse_version(v):
             return [int(x) for x in v.split('.') if x.isdigit()]
         
-        if parse_version(latest_version_str) > parse_version(__version__):
+        has_newer_release = parse_version(latest_version_str) > parse_version(__version__)
+        if has_newer_release or force:
             print(Fore.YELLOW + f"\nUpdate: A new version ({latest_version_str}) is available!")
 
             _os_name = platform.system().lower()
@@ -318,13 +319,31 @@ def check_for_updates():
             if not asset_url:
                 return
 
+            os.makedirs(TEMP_DIR, exist_ok=True)
             new_exe = os.path.join(TEMP_DIR, f"new_{asset_name}")
             if download(asset_url, new_exe):
                 current_exe = sys.executable
                 if is_windows:
                     up_bat = os.path.join(TEMP_DIR, "updater.bat")
                     with open(up_bat, "w") as f:
-                        f.write(f'@echo off\ntimeout /t 1 /nobreak >nul\nmove /Y "{new_exe}" "{current_exe}" >nul\nstart "" "{current_exe}"\ndel "%~f0"\n')
+                        f.write(
+                            f'@echo off\n'
+                            f'setlocal\n'
+                            f'set "SRC={new_exe}"\n'
+                            f'set "DST={current_exe}"\n'
+                            f'for /L %%i in (1,1,30) do (\n'
+                            f'  move /Y "%SRC%" "%DST%" >nul 2>&1 && goto launch\n'
+                            f'  timeout /t 1 /nobreak >nul\n'
+                            f')\n'
+                            f'echo [ERROR] Failed to replace binary after 30 retries. > "%TEMP%\\uell-updater-error.log"\n'
+                            f'echo Source: %SRC% >> "%TEMP%\\uell-updater-error.log"\n'
+                            f'echo Destination: %DST% >> "%TEMP%\\uell-updater-error.log"\n'
+                            f'goto end\n'
+                            f':launch\n'
+                            f'start "" "%DST%"\n'
+                            f':end\n'
+                            f'del "%~f0"\n'
+                        )
                     subprocess.Popen([up_bat], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
                 else:
                     up_sh = os.path.join(TEMP_DIR, "updater.sh")
@@ -332,10 +351,10 @@ def check_for_updates():
                         f.write(f'#!/bin/bash\nsleep 1\nmv -f "{new_exe}" "{current_exe}"\nchmod +x "{current_exe}"\n"{current_exe}" &\nrm -- "$0"\n')
                     os.chmod(up_sh, 0o755)
                     subprocess.Popen(["bash", up_sh])
-                print_info("Applying update: closing program...")
+                print(Fore.YELLOW + "Applying update and restarting...")
                 sys.exit(0)
     except Exception as e:
-        pass
+        print_error(f"Auto-update check failed: {e}", exit_code=None)
 
 def parse_file_drop(raw_path):
     cleaned_path = raw_path.strip()
