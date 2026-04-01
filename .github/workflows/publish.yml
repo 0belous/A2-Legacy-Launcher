@@ -9,7 +9,47 @@ on:
       - 'src/ue_legacy_launcher/**/*.py'
 
 jobs:
+  bump_version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version_tag: ${{ steps.get_tag.outputs.latest_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools bump-my-version pyinstaller requests colorama pySmartDL pyyaml
+          pip install .
+
+      - name: Automate Version Bump
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
+          bump-my-version bump patch
+          git push origin main --follow-tags
+
+      - name: Export latest tag
+        id: get_tag
+        run: |
+          git fetch --tags
+          echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+
   build_binaries:
+    needs: bump_version
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -32,16 +72,13 @@ jobs:
             artifact_name: uell-termux-arm64
             separator: ":"
             is_termux: "1"
-            
-    outputs:
-      version_tag: ${{ steps.get_tag.outputs.latest_tag }}
-      
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ needs.bump_version.outputs.version_tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -53,22 +90,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install setuptools bump-my-version pyinstaller requests colorama pySmartDL pyyaml
           pip install .
-
-      - name: Automate Version Bump (Ubuntu Only)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main
-          bump-my-version bump patch
-          git push origin main --follow-tags
-
-      - name: Export latest tag
-        if: matrix.os == 'ubuntu-latest'
-        id: get_tag
-        run: |
-          git fetch --tags
-          echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
 
       - name: Build Executable with PyInstaller
         env:
@@ -83,7 +104,9 @@ jobs:
           path: dist/${{ matrix.artifact_name }}
 
   publish_release:
-    needs: build_binaries
+    needs:
+      - bump_version
+      - build_binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -96,7 +119,7 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.build_binaries.outputs.version_tag }}
+          tag_name: ${{ needs.bump_version.outputs.version_tag }}
           make_latest: true
           files: |
             dist/uell-windows.exe
