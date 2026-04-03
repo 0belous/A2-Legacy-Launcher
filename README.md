@@ -1,6 +1,6 @@
 # UE Legacy Launcher
 
-An integrated version manager/downgrader for Oculus VR games built with Unreal Engine.
+A modular version manager for Oculus VR games built with Unreal Engine.
 
 [Repo Mirror](https://git.obelous.dev/obelous/UE-Legacy-Launcher)
 
@@ -81,7 +81,3 @@ autoupdate: true
 logging_mode: default / info
 manifest_url: (Manifest URL Here)
 ```
-
-Specifying a manifest allows the program to automatically select the arguments to install a desired version. See the example.json for how to format your own manifest.
-
-<hr>
