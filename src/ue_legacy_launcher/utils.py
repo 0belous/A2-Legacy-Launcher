@@ -86,6 +86,24 @@ def _bar_line(label, percent):
     done = int((clamped / 100.0) * width)
     return f"{label:<3} [{'#' * done}{'-' * (width - done)}] {clamped:6.2f}%"
 
+def _clear_progress_locked():
+    global PROGRESS_VISIBLE
+    if not PROGRESS_VISIBLE:
+        return
+    sys.stdout.write("\x1b[2F\x1b[2K\x1b[1E\x1b[2K\x1b[1F")
+    sys.stdout.flush()
+    PROGRESS_VISIBLE = False
+
+def _print_line(message):
+    with PROGRESS_LOCK:
+        should_restore = PROGRESS_ENABLED and not is_info_mode()
+        if should_restore:
+            _clear_progress_locked()
+        sys.stdout.write(f"{message}\n")
+        sys.stdout.flush()
+        if should_restore:
+            _render_progress_locked()
+
 def _render_progress_locked():
     global PROGRESS_VISIBLE
     if not PROGRESS_ENABLED or is_info_mode():
@@ -159,23 +177,16 @@ def set_obb_upload_progress(progress_percent):
 
 def print_info(message):
     if is_info_mode():
-        print(f"[INFO] {message}")
+        _print_line(f"[INFO] {message}")
 
 def print_success(message):
-    if is_info_mode():
-        print(Fore.GREEN + f"[SUCCESS] {message}")
+    _print_line(Fore.GREEN + f"[SUCCESS] {message}")
 
 def print_status(message):
-    print(message)
+    _print_line(message)
 
 def print_error(message, exit_code=1):
-    global PROGRESS_VISIBLE
-    with PROGRESS_LOCK:
-        if PROGRESS_VISIBLE:
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-            PROGRESS_VISIBLE = False
-    print(Fore.RED + f"[ERROR] {message}")
+    _print_line(Fore.RED + f"[ERROR] {message}")
     if exit_code is not None:
         sys.exit(exit_code)
 
@@ -561,13 +572,54 @@ def ensure_runtime_tools():
         except Exception:
             pass
 
+def _is_supported_quest_device(device_id):
+    supported_codenames = {"MONTEREY", "HOLLYWOOD", "SEACLIFF", "EUREKA", "PANTHER"}
+    supported_model_aliases = {
+        "QUEST",
+        "QUEST 2",
+        "QUEST PRO",
+        "QUEST 3",
+        "QUEST 3S",
+        "META QUEST",
+        "OCULUS QUEST",
+    }
+
+    props = {}
+    for prop_name in ("ro.product.device", "ro.product.name", "ro.product.model"):
+        value = run_command([ADB_PATH, "-s", device_id, "shell", "getprop", prop_name], suppress_output=True) or ""
+        cleaned = value.strip()
+        if cleaned:
+            props[prop_name] = cleaned
+
+    if not props:
+        return False, ""
+
+    upper_values = [p.upper() for p in props.values()]
+    for value in upper_values:
+        if any(code in value for code in supported_codenames):
+            return True, ", ".join(props.values())
+    model_and_name = " ".join(
+        [
+            props.get("ro.product.model", ""),
+            props.get("ro.product.name", ""),
+        ]
+    ).upper()
+    if any(alias in model_and_name for alias in supported_model_aliases):
+        return True, ", ".join(props.values())
+
+    return False, ", ".join(props.values())
+
 def get_connected_device():
     print_info("Looking for connected devices...")
     output = run_command([ADB_PATH, "devices"])
     devices = [line.split('\t')[0] for line in output.strip().split('\n')[1:] if "device" in line and "unauthorized" not in line]
     if len(devices) == 1:
-        print_success(f"Found one connected device: {devices[0]}")
-        return devices[0]
+        device_id = devices[0]
+        is_supported, device_info = _is_supported_quest_device(device_id)
+        if not is_supported:
+                print_error("Connected device is not a Quest headset.")
+        print_success(f"Found one connected device: {device_id}")
+        return device_id
     elif len(devices) > 1:
         print_error(f"Multiple devices found: {devices}. Please connect only one headset.")
     else:
@@ -699,7 +751,7 @@ def get_path_from_input(input_str, file_type, archive_path=None):
             latest_cache_index = get_cache_index()
             latest_cache_index[url] = cache_entry
             update_cache_index(latest_cache_index)
-            print_success(f"Successfully downloaded {file_type}.")
+            print_info(f"Successfully downloaded {file_type}.")
             return cached_file_path
         else:
             print_error(f"Failed to download {file_type} from {url}.")

@@ -102,6 +102,43 @@ def parse_uri_args():
         sys.argv = [sys.argv[0]] + [arg for arg in new_args if arg]
     sys.argv = [arg.replace("https//", "https://").replace("http//", "http://") for arg in sys.argv]
 
+def _extract_dynamic_set_operations(parser, argv):
+    operations = []
+    filtered_argv = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token.startswith("--set-") and token != "--set-config":
+            opt = token[2:]
+            key_part = opt[4:]
+            value = None
+            if "=" in key_part:
+                key_part, value = key_part.split("=", 1)
+            key = key_part.strip().replace('-', '_')
+            if not key:
+                parser.error("Invalid dynamic set option: '--set-' requires a key")
+            if value is None:
+                if i + 1 >= len(argv):
+                    parser.error(f"Option '{token}' requires a value")
+                value = argv[i + 1]
+                i += 1
+            if value == "":
+                parser.error(f"Option '{token}' requires a value")
+            operations.append((key, value))
+            i += 1
+            continue
+        filtered_argv.append(token)
+        i += 1
+    return operations, filtered_argv
+
+def _resolve_config_key(config, key):
+    if key in config:
+        return key
+    prefixed_matches = [k for k in config if k.startswith(f"{key}_")]
+    if len(prefixed_matches) == 1:
+        return prefixed_matches[0]
+    return None
+
 def uell():
     parser = argparse.ArgumentParser(
         description="Legacy Launcher "+__version__+" by Obelous ",
@@ -138,22 +175,40 @@ def uell():
     parser.add_argument("--no-clearcache", action="store_false", dest="clearcache", help=argparse.SUPPRESS)
     parser.add_argument("-r", "--restore", action="store_true", dest="restore", default=None, help="Restore to the latest version")
     parser.add_argument("--no-restore", action="store_false", dest="restore", help=argparse.SUPPRESS)
-    parser.add_argument("--set-manifest", dest="set_manifest", help="Set the manifest URL in the config")
+    parser.add_argument("--set-config", dest="set_config", nargs=2, metavar=("KEY", "VALUE"), help="Set an existing config key to a value")
     parser.add_argument("--adb", nargs=argparse.REMAINDER, help="Run a custom adb command using bundled adb (example: --adb devices)")
     parser.add_argument("-sw", "--switch-map", action="store_true", dest="switch_version", help="Change which map to load")
     parser.add_argument("--stay", action="store_true", help="Keep the window open until Enter is pressed")
     parser.add_argument("--message")
-    args = parser.parse_args()
+    dynamic_set_ops, filtered_argv = _extract_dynamic_set_operations(parser, sys.argv[1:])
+    args, unknown_args = parser.parse_known_args(filtered_argv)
+    if unknown_args:
+        parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
     print(Fore.LIGHTBLUE_EX + BANNER)
     
     config = load_config()
     set_logging_mode(config.get('logging_mode', 'default'))
     
-    if args.set_manifest:
-        config['manifest_url'] = args.set_manifest
+    set_operations = []
+    if args.set_config:
+        set_operations.append((args.set_config[0], args.set_config[1]))
+    set_operations.extend(dynamic_set_ops)
+
+    if set_operations:
+        for raw_key, raw_value in set_operations:
+            normalized_key = str(raw_key).strip().replace('-', '_')
+            resolved_key = _resolve_config_key(config, normalized_key)
+            if not resolved_key:
+                print_error(f"Config key '{raw_key}' does not exist in {CONFIG_FILE}.", exit_code=1)
+            try:
+                parsed_value = yaml.safe_load(raw_value)
+            except Exception:
+                parsed_value = raw_value
+            config[resolved_key] = parsed_value
+            print_success(f"Config updated: {resolved_key} = {parsed_value}")
+
         with open(CONFIG_FILE, 'w') as f:
             yaml.dump(config, f)
-        print_success(f"Manifest updated: {args.set_manifest}")
         if not any([args.download, args.apk, args.obb, args.ini, args.remove, 
                     args.logs, args.list, args.open, args.clearcache, 
                     args.restore, args.switch_version, args.adb]):
@@ -295,8 +350,6 @@ def uell():
         nonlocal action_performed
         effective_package_name = f"com.LegacyLauncher.{task_args.rename}" if task_args.rename else BASE_PACKAGE
         apk_path = None
-        obb_path = None
-        was_wiped = False
         has_apk = bool(task_args.apk)
         has_obb = bool(task_args.obb)
 
@@ -331,16 +384,14 @@ def uell():
                 if not task_args.skipdecompile:
                     clean_temp_dir()
                 process_apk(apk_path, task_args, BASE_PACKAGE, effective_package_name)
-                was_wiped = install_modded_apk(device_id, effective_package_name)
+                install_modded_apk(device_id, effective_package_name)
             elif task_args.obb:
                 action_performed = True
                 obb_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 obb_future = obb_executor.submit(resolve_and_upload_obb)
 
             if obb_future:
-                obb_path = obb_future.result()
-                if was_wiped and obb_path:
-                    upload_obb(device_id, obb_path, effective_package_name, task_args.rename, BASE_PACKAGE)
+                obb_future.result()
         finally:
             if obb_executor:
                 obb_executor.shutdown(wait=not _interrupt_event.is_set())
@@ -463,7 +514,7 @@ def uell():
 
     if not action_performed:
         print_error("No action specified. Please provide a task like --apk, --ini, etc. Use -h for help.", exit_code=0)
-    print(Fore.LIGHTBLUE_EX + "\n[DONE] All tasks complete. Have fun!")
+    print(Fore.LIGHTBLUE_EX + "\n[DONE] All tasks complete.")
 
 def main():
     _configure_ssl()

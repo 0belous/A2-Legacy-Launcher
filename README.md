@@ -15,7 +15,7 @@ A modular version manager for Oculus VR games built with Unreal Engine.
 
 ```
 usage: uell.exe [-h] [-v] [-y] [--archive ARCHIVE] [-a APK] [-o OBB] [-i INI] [-m MAP] [-c COMMANDLINE] [-so SO] [-rn RENAME] [-p PATCH] [-rm] [-l] [-ls] [-op] [-sp] [-sk] [-cc] [-r]
-                [--set-manifest SET_MANIFEST] [--adb ...] [-sw] [--stay] [--message MESSAGE]
+                [--set-config VALUE] [--adb ...] [-sw] [--stay] [--message MESSAGE]
                 [download ...]
 
 Legacy Launcher 1.4
@@ -48,7 +48,7 @@ options:
   -sk, --skipdecompile  Reuse previously decompiled files
   -cc, --clearcache     Delete cached downloads
   -r, --restore         Restore to the latest version
-  --set-manifest SET_MANIFEST
+  --set-config VALUE
                         Set the manifest URL in the config
   --adb ...             Run a custom adb command using bundled adb (example: --adb devices)
   -sw, --switch-map     Change which map to load
