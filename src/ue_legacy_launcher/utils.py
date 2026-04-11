@@ -27,6 +27,8 @@ DOWNLOAD_INTERRUPT_EVENT = threading.Event()
 LOGGING_MODE = "default"
 PROGRESS_VISIBLE = False
 PROGRESS_ENABLED = False
+INFO_DOWNLOAD_VISIBLE = False
+INFO_DOWNLOAD_LINES = 2
 PROGRESS_BARS = {"apk": 0.0, "obb": 0.0}
 PROGRESS_COMPONENTS = {
     "apk_download": 0.0,
@@ -48,7 +50,6 @@ def _get_requests_session():
     return session
 
 def _configure_ssl():
-    """Configure SSL/HTTPS certificate verification using certifi."""
     if certifi and "SSL_CERT_FILE" not in os.environ:
         os.environ["SSL_CERT_FILE"] = certifi.where()
         os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
@@ -60,7 +61,6 @@ def is_interrupt_requested():
     return DOWNLOAD_INTERRUPT_EVENT.is_set()
 
 def _prepare_subprocess_env(env=None, for_sdk_command=False):
-    """Prepare environment for subprocess execution, handling readline conflicts on Linux."""
     if env is None:
         env = os.environ.copy()
     else:
@@ -86,6 +86,46 @@ def _bar_line(label, percent):
     done = int((clamped / 100.0) * width)
     return f"{label:<3} [{'#' * done}{'-' * (width - done)}] {clamped:6.2f}%"
 
+def _info_download_line(file_type):
+    key = "apk_download" if file_type == "apk" else "obb_download"
+    label = file_type.upper()
+    percent = PROGRESS_COMPONENTS.get(key, 0.0)
+    width = 28
+    done = int((max(0.0, min(100.0, percent)) / 100.0) * width)
+    return f"[DL {label}] [{'#' * done}{'-' * (width - done)}] {percent:6.2f}%"
+
+def _clear_info_download_locked():
+    global INFO_DOWNLOAD_VISIBLE
+    if not INFO_DOWNLOAD_VISIBLE:
+        return
+    sys.stdout.write(f"\x1b[{INFO_DOWNLOAD_LINES}F")
+    for _ in range(INFO_DOWNLOAD_LINES):
+        sys.stdout.write("\x1b[2K\x1b[1E")
+    sys.stdout.write(f"\x1b[{INFO_DOWNLOAD_LINES}F")
+    sys.stdout.flush()
+    INFO_DOWNLOAD_VISIBLE = False
+
+def _render_info_download_locked():
+    global INFO_DOWNLOAD_VISIBLE
+    if not is_info_mode():
+        _clear_info_download_locked()
+        return
+
+    apk_active = PROGRESS_COMPONENTS.get("apk_download", 100.0) < 100.0
+    obb_active = PROGRESS_COMPONENTS.get("obb_download", 100.0) < 100.0
+    if not (apk_active or obb_active):
+        _clear_info_download_locked()
+        return
+
+    if INFO_DOWNLOAD_VISIBLE:
+        sys.stdout.write(f"\x1b[{INFO_DOWNLOAD_LINES}F")
+
+    apk_line = _info_download_line("apk") if apk_active else "[DL APK] done"
+    obb_line = _info_download_line("obb") if obb_active else "[DL OBB] done"
+    sys.stdout.write(f"\x1b[2K{apk_line}\n\x1b[2K{obb_line}\n")
+    sys.stdout.flush()
+    INFO_DOWNLOAD_VISIBLE = True
+
 def _clear_progress_locked():
     global PROGRESS_VISIBLE
     if not PROGRESS_VISIBLE:
@@ -96,13 +136,18 @@ def _clear_progress_locked():
 
 def _print_line(message):
     with PROGRESS_LOCK:
-        should_restore = PROGRESS_ENABLED and not is_info_mode()
-        if should_restore:
+        restore_default = PROGRESS_ENABLED and not is_info_mode()
+        restore_info_download = INFO_DOWNLOAD_VISIBLE and is_info_mode()
+        if restore_default:
             _clear_progress_locked()
+        if restore_info_download:
+            _clear_info_download_locked()
         sys.stdout.write(f"{message}\n")
         sys.stdout.flush()
-        if should_restore:
+        if restore_default:
             _render_progress_locked()
+        if restore_info_download:
+            _render_info_download_locked()
 
 def _render_progress_locked():
     global PROGRESS_VISIBLE
@@ -132,6 +177,8 @@ def _set_component(component, value):
         PROGRESS_COMPONENTS[component] = max(0.0, min(100.0, float(value)))
         _recompute_bars_locked()
         _render_progress_locked()
+        if component in ("apk_download", "obb_download"):
+            _render_info_download_locked()
 
 def begin_install_progress(apk_active, obb_active):
     global PROGRESS_ENABLED, PROGRESS_VISIBLE
@@ -351,7 +398,7 @@ def check_for_updates(force=False):
                             f'echo Destination: %DST% >> "%TEMP%\\uell-updater-error.log"\n'
                             f'goto end\n'
                             f':launch\n'
-                            f'start "" "%DST%"\n'
+                            f'start "" "%DST%" --version --stay\n'
                             f':end\n'
                             f'del "%~f0"\n'
                         )
@@ -359,7 +406,7 @@ def check_for_updates(force=False):
                 else:
                     up_sh = os.path.join(TEMP_DIR, "updater.sh")
                     with open(up_sh, "w") as f:
-                        f.write(f'#!/bin/bash\nsleep 1\nmv -f "{new_exe}" "{current_exe}"\nchmod +x "{current_exe}"\n"{current_exe}" &\nrm -- "$0"\n')
+                        f.write(f'#!/bin/bash\nsleep 1\nmv -f "{new_exe}" "{current_exe}"\nchmod +x "{current_exe}"\n"{current_exe}" --version --stay &\nrm -- "$0"\n')
                     os.chmod(up_sh, 0o755)
                     subprocess.Popen(["bash", up_sh])
                 print(Fore.YELLOW + "Applying update and restarting...")
@@ -434,14 +481,9 @@ def download(url, filename, file_type=None, expected_sha256=None):
                     progress = obj.get_progress()
                     if file_type in ("apk", "obb"):
                         set_download_progress(file_type, progress * 100.0)
-                    done = int(50 * progress)
-                    if is_info_mode():
-                        sys.stdout.write(f"\r[{'=' * done}{' ' * (50-done)}] {progress*100:.1f}% ({downloaded_mb:.2f}/{total_mb:.2f} MB) - {speed}          ")
                 else:
-                    if is_info_mode():
-                        sys.stdout.write(f"\rDownloading... {speed}          ")
-                if is_info_mode():
-                    sys.stdout.flush()
+                    if file_type in ("apk", "obb"):
+                        set_download_progress(file_type, 0.0)
                 time.sleep(0.5)
 
             if obj.isSuccessful():
@@ -455,13 +497,6 @@ def download(url, filename, file_type=None, expected_sha256=None):
                 total = obj.get_final_filesize()
                 if file_type in ("apk", "obb"):
                     mark_download_complete(file_type)
-                if is_info_mode():
-                    if total > 0:
-                        total_mb = total / (1024 * 1024)
-                        sys.stdout.write(f"\r[{'=' * 50}] 100.0% ({total_mb:.2f}/{total_mb:.2f} MB) - Done.          \n")
-                    else:
-                        sys.stdout.write(f"\rDownload Complete.          \n")
-                    sys.stdout.flush()
                 return True
             else:
                 raise Exception(f"pySmartDL failed: {obj.get_errors()}")
@@ -554,23 +589,31 @@ def ensure_runtime_tools():
 
     aapt2_ok = True
     if IS_TERMUX:
-        aapt2_ok = False
-        if os.path.exists(AAPT2_PATH):
-            try:
-                aapt2_ok = _sha256_file(AAPT2_PATH) == AAPT2_TERMUX_SHA256
-                if not aapt2_ok:
-                    print_info("Existing aapt2 checksum mismatch. Re-downloading...")
-                    os.remove(AAPT2_PATH)
-            except Exception:
-                aapt2_ok = False
+        if AAPT2_PATH != AAPT2_BUNDLED_PATH:
+            if os.path.exists(AAPT2_PATH):
+                aapt2_ok = True
+            else:
+                print_error(f"Configured aapt2 override not found: {AAPT2_PATH}")
+        else:
+            aapt2_ok = False
+            if os.path.exists(AAPT2_BUNDLED_PATH):
+                try:
+                    aapt2_ok = _sha256_file(AAPT2_BUNDLED_PATH) == AAPT2_TERMUX_SHA256
+                    if not aapt2_ok:
+                        print_info("Existing bundled aapt2 checksum mismatch. Re-downloading...")
+                        os.remove(AAPT2_BUNDLED_PATH)
+                except Exception:
+                    aapt2_ok = False
 
-    if IS_TERMUX and not aapt2_ok:
-        if not download(AAPT2_TERMUX_URL, AAPT2_PATH, expected_sha256=AAPT2_TERMUX_SHA256):
-            print_error(f"Failed to download aapt2 from {AAPT2_TERMUX_URL}")
-        try:
-            os.chmod(AAPT2_PATH, 0o755)
-        except Exception:
-            pass
+            if not aapt2_ok:
+                if not download(AAPT2_TERMUX_URL, AAPT2_BUNDLED_PATH, expected_sha256=AAPT2_TERMUX_SHA256):
+                    print_error(f"Failed to download aapt2 from {AAPT2_TERMUX_URL}")
+                aapt2_ok = True
+
+            try:
+                os.chmod(AAPT2_BUNDLED_PATH, 0o755)
+            except Exception:
+                pass
 
 def _is_supported_quest_device(device_id):
     supported_codenames = {"MONTEREY", "HOLLYWOOD", "SEACLIFF", "EUREKA", "PANTHER"}
