@@ -2,8 +2,6 @@
 
 A modular version manager for Oculus VR games built with Unreal Engine.
 
-[Repo Mirror](https://git.obelous.dev/obelous/UE-Legacy-Launcher)
-
 ## Get started
 
 1. Navigate to releases
