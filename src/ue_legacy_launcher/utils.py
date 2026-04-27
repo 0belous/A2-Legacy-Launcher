@@ -29,7 +29,8 @@ PROGRESS_VISIBLE = False
 PROGRESS_ENABLED = False
 INFO_DOWNLOAD_VISIBLE = False
 INFO_DOWNLOAD_LINES = 2
-PROGRESS_BARS = {"apk": 0.0, "obb": 0.0}
+PROGRESS_BARS = {"download": 0.0, "install": 0.0}
+PROGRESS_ACTIVE = {"apk": False, "obb": False}
 PROGRESS_COMPONENTS = {
     "apk_download": 0.0,
     "apk_stage": 0.0,
@@ -153,23 +154,36 @@ def _render_progress_locked():
     global PROGRESS_VISIBLE
     if not PROGRESS_ENABLED or is_info_mode():
         return
-    apk_line = _bar_line("APK", PROGRESS_BARS["apk"])
-    obb_line = _bar_line("OBB", PROGRESS_BARS["obb"])
+    download_line = _bar_line("Downloading", PROGRESS_BARS["download"])
+    install_line = _bar_line("Installing", PROGRESS_BARS["install"])
     if PROGRESS_VISIBLE:
         sys.stdout.write("\x1b[2F")
-    sys.stdout.write(f"\x1b[2K{apk_line}\n\x1b[2K{obb_line}\n")
+    sys.stdout.write(f"\x1b[2K{download_line}\n\x1b[2K{install_line}\n")
     sys.stdout.flush()
     PROGRESS_VISIBLE = True
 
 def _recompute_bars_locked():
-    PROGRESS_BARS["apk"] = (
-        APK_WEIGHTS["download"] * PROGRESS_COMPONENTS["apk_download"]
-        + APK_WEIGHTS["stage"] * PROGRESS_COMPONENTS["apk_stage"]
-        + APK_WEIGHTS["install"] * PROGRESS_COMPONENTS["apk_install"]
+    download_values = []
+    if PROGRESS_ACTIVE["apk"]:
+        download_values.append(PROGRESS_COMPONENTS["apk_download"])
+    if PROGRESS_ACTIVE["obb"]:
+        download_values.append(PROGRESS_COMPONENTS["obb_download"])
+
+    install_values = []
+    if PROGRESS_ACTIVE["apk"]:
+        apk_install_progress = (
+            APK_WEIGHTS["stage"] * PROGRESS_COMPONENTS["apk_stage"]
+            + APK_WEIGHTS["install"] * PROGRESS_COMPONENTS["apk_install"]
+        ) / (APK_WEIGHTS["stage"] + APK_WEIGHTS["install"])
+        install_values.append(apk_install_progress)
+    if PROGRESS_ACTIVE["obb"]:
+        install_values.append(PROGRESS_COMPONENTS["obb_upload"])
+
+    PROGRESS_BARS["download"] = (
+        sum(download_values) / len(download_values) if download_values else 100.0
     )
-    PROGRESS_BARS["obb"] = (
-        OBB_WEIGHTS["download"] * PROGRESS_COMPONENTS["obb_download"]
-        + OBB_WEIGHTS["upload"] * PROGRESS_COMPONENTS["obb_upload"]
+    PROGRESS_BARS["install"] = (
+        sum(install_values) / len(install_values) if install_values else 100.0
     )
 
 def _set_component(component, value):
@@ -185,6 +199,8 @@ def begin_install_progress(apk_active, obb_active):
     with PROGRESS_LOCK:
         PROGRESS_ENABLED = True
         PROGRESS_VISIBLE = False
+        PROGRESS_ACTIVE["apk"] = bool(apk_active)
+        PROGRESS_ACTIVE["obb"] = bool(obb_active)
         PROGRESS_COMPONENTS["apk_download"] = 0.0 if apk_active else 100.0
         PROGRESS_COMPONENTS["apk_stage"] = 0.0 if apk_active else 100.0
         PROGRESS_COMPONENTS["apk_install"] = 0.0 if apk_active else 100.0
@@ -203,6 +219,8 @@ def finish_install_progress():
         _recompute_bars_locked()
         _render_progress_locked()
         PROGRESS_ENABLED = False
+        PROGRESS_ACTIVE["apk"] = False
+        PROGRESS_ACTIVE["obb"] = False
 
 def set_download_progress(file_type, progress_percent):
     if file_type == "apk":

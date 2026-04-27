@@ -32,6 +32,18 @@ init(autoreset=True)
 
 _interrupt_event = threading.Event()
 
+def open_file(path):
+    try:
+        abs_path = os.path.abspath(path)
+        if is_windows:
+            os.startfile(abs_path)
+        elif platform.system() == "Darwin":
+            subprocess.run(["open", abs_path], check=False)
+        else:
+            subprocess.run(["xdg-open", abs_path], check=False)
+    except Exception as e:
+        print_info(f"Could not open file automatically: {e}")
+
 def _signal_handler(signum, frame):
     _interrupt_event.set()
     request_interrupt()
@@ -490,6 +502,8 @@ def uell():
                 shutil.move(newest, log_final_name)
                 for f, _ in pulled_logs: 
                     if f != newest and os.path.exists(f): os.remove(f)
+                print_info(f"Log file saved at {os.path.abspath(log_final_name)}")
+                open_file(log_final_name)
 
                 with open(log_final_name, "r", encoding='utf-8', errors='replace') as file:
                     content = file.read()
@@ -503,13 +517,13 @@ def uell():
         print_info(f"An unexpected error occurred: {e}")
     if download_tasks:
         for idx, (identifier, version_data, flags_str, task_args) in enumerate(download_tasks, start=1):
-            print_status(f"Installing ({idx}/{len(download_tasks)}): {version_data.get('version', identifier)}")
+            print_status(f"Sideloading ({idx}/{len(download_tasks)}): {version_data.get('version', identifier)}")
             if flags_str and is_info_mode():
                 print_info(f"Using flags: {flags_str}")
             run_install_flow(task_args)
     else:
         if args.apk or args.obb:
-            print_status("Installing (1/1): custom input")
+            print_status("Sideloading (1/1): custom input")
         run_install_flow(args)
 
     if not action_performed:

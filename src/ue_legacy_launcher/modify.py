@@ -18,6 +18,7 @@ from .utils import (
 def modify_manifest(decompiled_dir):
     manifest_path = os.path.join(decompiled_dir, "AndroidManifest.xml")
     permissions_to_remove = [
+        "android.permission.INTERNET",
         "android.permission.RECORD_AUDIO",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_CONNECT"
@@ -256,7 +257,7 @@ def upload_obb(device_id, obb_file, effective_package_name, is_renamed, original
     set_obb_upload_progress(30)
     run_command([ADB_PATH, "-s", device_id, "push", obb_file, destination_path])
     set_obb_upload_progress(100)
-    print_info("OBB upload complete.")
+    print_success("OBB upload complete.")
 
 def push_ini(device_id, ini_file, package_name, app_path):
     print_info("Pushing INI file...")
