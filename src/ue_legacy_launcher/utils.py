@@ -450,6 +450,17 @@ def _sha256_file(path):
             digest.update(chunk)
     return digest.hexdigest().lower()
 
+def _validate_file_sha256(file_path, expected_sha256):
+    if not expected_sha256:
+        return True
+    actual_sha256 = _sha256_file(file_path)
+    expected = expected_sha256.lower()
+    if actual_sha256 != expected:
+        raise Exception(
+            f"Checksum mismatch for {os.path.basename(file_path)}: expected {expected}, got {actual_sha256}"
+        )
+    return True
+
 def download(url, filename, file_type=None, expected_sha256=None):
     _configure_ssl()
     
@@ -505,13 +516,7 @@ def download(url, filename, file_type=None, expected_sha256=None):
                 time.sleep(0.5)
 
             if obj.isSuccessful():
-                if expected_sha256:
-                    actual_sha256 = _sha256_file(filename)
-                    expected = expected_sha256.lower()
-                    if actual_sha256 != expected:
-                        raise Exception(
-                            f"Checksum mismatch for {os.path.basename(filename)}: expected {expected}, got {actual_sha256}"
-                        )
+                _validate_file_sha256(filename, expected_sha256)
                 total = obj.get_final_filesize()
                 if file_type in ("apk", "obb"):
                     mark_download_complete(file_type)
@@ -715,7 +720,7 @@ def update_cache_index(index):
         with open(CACHE_INDEX, 'w') as f:
             json.dump(index, f, indent=4)
 
-def get_path_from_input(input_str, file_type, archive_path=None):
+def get_path_from_input(input_str, file_type, archive_path=None, expected_sha256=None):
     if not input_str:
         return None
     if input_str.startswith("archive:/"):
@@ -730,6 +735,8 @@ def get_path_from_input(input_str, file_type, archive_path=None):
         target_path = os.path.join(CACHE_DIR, target_filename)
         if os.path.exists(target_path):
              print_info(f"Using cached extracted file: {target_path}")
+             if expected_sha256:
+                 _validate_file_sha256(target_path, expected_sha256)
              return target_path
         try:
              print_info(f"Extracting {internal_path} from archive...")
@@ -801,11 +808,24 @@ def get_path_from_input(input_str, file_type, archive_path=None):
                     update_cache_index(cache_index)
             if not is_expired:
                 cached_path = cache_index[url]['path']
-                print_info(f"Using cached {file_type}: {cached_path}")
-                if file_type in ('apk', 'obb'):
-                    mark_download_complete(file_type)
-                return cached_path
-        if download(url, cached_file_path, file_type=file_type):
+                if expected_sha256:
+                    try:
+                        _validate_file_sha256(cached_path, expected_sha256)
+                    except Exception:
+                        print_info(f"Cached {file_type} checksum mismatch, re-downloading...")
+                        try:
+                            os.remove(cached_path)
+                        except OSError:
+                            pass
+                        del cache_index[url]
+                        update_cache_index(cache_index)
+                        cached_path = None
+                if cached_path:
+                    print_info(f"Using cached {file_type}: {cached_path}")
+                    if file_type in ('apk', 'obb'):
+                        mark_download_complete(file_type)
+                    return cached_path
+        if download(url, cached_file_path, file_type=file_type, expected_sha256=expected_sha256):
             cache_entry = {"path": cached_file_path}
             if file_type == 'json':
                 cache_entry['timestamp'] = time.time()

@@ -291,6 +291,8 @@ def uell():
 
             task_args.apk = version_data.get('apk_url')
             task_args.obb = version_data.get('obb_url')
+            task_args.apk_hash = version_data.get('apk_hash')
+            task_args.obb_hash = version_data.get('obb_hash')
             download_tasks.append((identifier, version_data, flags_str, task_args))
 
     if args.message:
@@ -369,7 +371,7 @@ def uell():
             begin_install_progress(has_apk, has_obb)
 
         def resolve_and_upload_obb():
-            local_obb_path = get_path_from_input(task_args.obb, "obb", local_archive)
+            local_obb_path = get_path_from_input(task_args.obb, "obb", local_archive, getattr(task_args, 'obb_hash', None))
             if not local_obb_path:
                 print_error("Failed to process OBB file.")
             if not local_obb_path.lower().endswith(".obb"):
@@ -389,7 +391,7 @@ def uell():
                     thread.daemon = True
                 if task_args.obb:
                     obb_future = obb_executor.submit(resolve_and_upload_obb)
-                apk_path = get_path_from_input(task_args.apk, "apk", local_archive)
+                apk_path = get_path_from_input(task_args.apk, "apk", local_archive, getattr(task_args, 'apk_hash', None))
                 if not apk_path.lower().endswith(".apk"):
                     print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
 
@@ -454,7 +456,7 @@ def uell():
         begin_install_progress(True, True)
 
         def restore_obb_worker():
-            resolved_obb = get_path_from_input(latest.get('obb_url'), "obb", local_archive)
+            resolved_obb = get_path_from_input(latest.get('obb_url'), "obb", local_archive, latest.get('obb_hash'))
             if not resolved_obb:
                 print_error("Failed to process OBB file.")
             if not resolved_obb.lower().endswith(".obb"):
@@ -465,7 +467,7 @@ def uell():
         obb_future = obb_executor.submit(restore_obb_worker)
 
         try:
-            apk_path = get_path_from_input(latest.get('apk_url'), "apk", local_archive)
+            apk_path = get_path_from_input(latest.get('apk_url'), "apk", local_archive, latest.get('apk_hash'))
             if not apk_path.lower().endswith(".apk"):
                 print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
             subprocess.run([ADB_PATH, "-s", device_id, "uninstall", BASE_PACKAGE], capture_output=True)
