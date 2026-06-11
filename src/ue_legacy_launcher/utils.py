@@ -424,9 +424,21 @@ def check_for_updates(force=False):
                 else:
                     up_sh = os.path.join(TEMP_DIR, "updater.sh")
                     with open(up_sh, "w") as f:
-                        f.write(f'#!/bin/bash\nsleep 1\nmv -f "{new_exe}" "{current_exe}"\nchmod +x "{current_exe}"\n"{current_exe}" --version --stay &\nrm -- "$0"\n')
+                        f.write(
+                            f'#!/bin/bash\n'
+                            f'PID={os.getpid()}\n'
+                            f'while kill -0 "$PID" 2>/dev/null; do sleep 0.2; done\n'
+                            f'sleep 0.3\n'
+                            f'mv -f "{new_exe}" "{current_exe}"\n'
+                            f'chmod +x "{current_exe}"\n'
+                            f'"{current_exe}" --version --stay &\n'
+                            f'rm -- "$0"\n'
+                        )
                     os.chmod(up_sh, 0o755)
-                    subprocess.Popen(["bash", up_sh])
+                    clean_env = os.environ.copy()
+                    clean_env.pop('LD_LIBRARY_PATH', None)
+                    clean_env.pop('LD_PRELOAD', None)
+                    subprocess.Popen(["bash", up_sh], env=clean_env)
                 print(Fore.YELLOW + "Applying update and restarting...")
                 sys.exit(0)
     except Exception as e:
