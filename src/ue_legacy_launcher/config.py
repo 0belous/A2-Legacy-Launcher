@@ -3,7 +3,7 @@ import platform
 import sys
 from importlib import resources
 
-__version__ = "1.4.8"
+__version__ = "1.4.9"
 USER_AGENT = f"LegacyLauncher/{__version__}"
 IS_TERMUX = "TERMUX_VERSION" in os.environ
 
