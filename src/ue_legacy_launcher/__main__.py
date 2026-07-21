@@ -384,6 +384,7 @@ def uell():
         try:
             if task_args.apk:
                 action_performed = True
+                subprocess.run([ADB_PATH, "-s", device_id, "uninstall", effective_package_name], capture_output=True)
                 if task_args.obb:
                     action_performed = True
                 obb_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="uell-obb-")
@@ -463,6 +464,10 @@ def uell():
                 print_error(f"Invalid OBB: File is not an .obb file.\nPath: '{resolved_obb}'")
             upload_obb(device_id, resolved_obb, BASE_PACKAGE, False, BASE_PACKAGE)
 
+        # Uninstall first to avoid a race condition where the uninstall
+        # deletes the OBB uploaded in parallel.
+        subprocess.run([ADB_PATH, "-s", device_id, "uninstall", BASE_PACKAGE], capture_output=True)
+
         obb_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         obb_future = obb_executor.submit(restore_obb_worker)
 
@@ -470,7 +475,6 @@ def uell():
             apk_path = get_path_from_input(latest.get('apk_url'), "apk", local_archive, latest.get('apk_hash'))
             if not apk_path.lower().endswith(".apk"):
                 print_error(f"Invalid APK: File is not an .apk file.\nPath: '{apk_path}'")
-            subprocess.run([ADB_PATH, "-s", device_id, "uninstall", BASE_PACKAGE], capture_output=True)
             run_command([ADB_PATH, "-s", device_id, "install", "-r", apk_path])
             obb_future.result()
         finally:

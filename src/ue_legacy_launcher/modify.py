@@ -230,7 +230,6 @@ def process_apk(apk_path, args, base_package, effective_package_name):
     print_success("APK processing complete.")
 
 def install_modded_apk(device_id, package_name):
-    subprocess.run([ADB_PATH, "-s", device_id, "uninstall", package_name], capture_output=True)
     print_info("Installing modified APK...")
     set_apk_install_progress(20)
     proc = subprocess.run([ADB_PATH, "-s", device_id, "install", "--streaming", "--no-incremental", SIGNED_APK], capture_output=True, text=True)
