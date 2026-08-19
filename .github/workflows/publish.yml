@@ -77,10 +77,6 @@ jobs:
             artifact_name: uell-macos
             separator: ":"
             is_termux: "0"
-          - os: ubuntu-24.04-arm
-            artifact_name: uell-termux-arm64
-            separator: ":"
-            is_termux: "1"
 
     steps:
       - name: Checkout code
@@ -135,4 +131,3 @@ jobs:
             dist/uell-windows.exe
             dist/uell-linux
             dist/uell-macos
-            dist/uell-termux-arm64
