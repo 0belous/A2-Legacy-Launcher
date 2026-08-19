@@ -7,7 +7,7 @@ Legacy Launcher installs and manages legacy versions of Unreal Engine games on M
 - A supported Meta Quest headset
 - A USB connection with USB debugging enabled
 - Java Runtime Environment (JRE)
-- Windows, Linux, or MacOS pc
+- Windows, Linux, or MacOS
 
 The launcher checks for one authorized headset. Disconnect additional Android devices before you install a game.
 
