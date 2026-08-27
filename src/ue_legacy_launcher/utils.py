@@ -297,7 +297,7 @@ def load_config():
     if not os.path.exists(CONFIG_FILE):
         print_info(f"Creating default configuration at {CONFIG_FILE}")
         default_config = {
-            'manifest_url': '(Manifest URL Here)',
+            'manifest_url': 'https://dl.obelous.dev/public/A2-archive/manifest.json',
             'autoupdate': True,
             'oculus_token': '',
             'logging_mode': 'default'
