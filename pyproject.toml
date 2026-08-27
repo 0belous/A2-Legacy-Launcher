@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ue-legacy-launcher"
-version = "1.4.11"
+version = "1.4.12"
 description = "An integrated version manager for Oculus/Unreal games"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -33,7 +33,7 @@ packages = ["ue_legacy_launcher"]
 package-dir = {"" = "src"}
 
 [tool.bumpversion]
-current_version = "1.4.11"
+current_version = "1.4.12"
 commit = true
 tag = true
 
