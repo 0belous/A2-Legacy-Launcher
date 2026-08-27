@@ -24,10 +24,10 @@ sudo apt install default-jre
 
 ## Configure a manifest
 
-The launcher uses a JSON manifest to find downloadable game versions. Set the manifest URL with:
+The launcher uses a JSON manifest to find downloadable game versions. <br>For example to downgrade Orion Drift set the manifest URL with:
 
 ```sh
-uell --set-config manifest_url https://example.com/manifest.json
+uell --set-config manifest_url https://dl.obelous.dev/public/A2-archive/manifest.json
 ```
 
 The manifest must include the launcher-compatible version and game metadata. See [`example.json`](example.json) for the supported structure. A version can include `apk_url`, `obb_url`, and a `flags` string containing launcher options.
@@ -35,7 +35,7 @@ The manifest must include the launcher-compatible version and game metadata. See
 The configuration file is stored at the following path:
 
 - Linux: `~/.config/ue-legacy-launcher/config.yml`
-- Windows and Termux: `~/.ue-legacy-launcher/config.yml`
+- Windows: `~/.ue-legacy-launcher/config.yml`
 
 The default settings are:
 
