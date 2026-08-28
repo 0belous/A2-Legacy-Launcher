@@ -30,6 +30,8 @@ The launcher uses a JSON manifest to find downloadable game versions. <br>For ex
 uell --set-config manifest_url https://dl.obelous.dev/public/A2-archive/manifest.json
 ```
 
+See more about the Orion Drift archive here: https://dl-uk.obelous.dev/public/A2-archive/
+
 The manifest must include the launcher-compatible version and game metadata. See [`example.json`](example.json) for the supported structure. A version can include `apk_url`, `obb_url`, and a `flags` string containing launcher options.
 
 The configuration file is stored at the following path:
